@@ -1,0 +1,23 @@
+-- Create the table to store your book collection
+CREATE TABLE books (
+  id TEXT PRIMARY KEY, -- Using the ISBN or OpenLibrary ID as the primary key
+  title TEXT NOT NULL,
+  authors TEXT,
+  publish_date TEXT,
+  cover_url TEXT,
+  market_price REAL, -- Using REAL for floating point numbers
+  date_added TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- Enable Row Level Security (RLS) on the new table
+-- This is a crucial security step.
+ALTER TABLE books ENABLE ROW LEVEL SECURITY;
+
+-- Create a policy that allows users to see and manage their own books.
+-- This policy allows any user (including the 'anon' public user) to perform all actions.
+-- This is suitable for a personal, single-user application.
+CREATE POLICY "Public user can manage all books"
+  ON books
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
