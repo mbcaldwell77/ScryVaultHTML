@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScryVault - ISBN Scanner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase Client Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Barcode Scanning Library -->
+    <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #scanner-modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.9);
+            justify-content: center;
+            align-items: center;
+        }
+        #video-container {
+            position: relative;
+            width: 90vw;
+            max-width: 640px;
+            border: 3px solid #10b981;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #111827;
+        }
+        #scanner-video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #close-scanner-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 101;
+        }
+        .book-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-300">
+
+    <!-- Scanner Modal -->
+    <div id="scanner-modal">
+        <div id="video-container">
+            <video id="scanner-video"></video>
+            <button id="close-scanner-btn" class="p-2 bg-red-600/80 rounded-full text-white hover:bg-red-700">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+    </div>
+
+    <div id="app" class="container mx-auto p-4 md:p-8 max-w-6xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-green-500">ScryVault</h1>
+            <p class="text-gray-400 mt-2">Scan, price, and manage your book collection with ease.</p>
+        </header>
+
+        <main>
+             <section id="scanner-section" class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-semibold mb-4 text-white">Scan New Book</h2>
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <input type="text" id="isbn-input" placeholder="Enter ISBN-13 (e.g., 9780345391803)" class="flex-grow p-3 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 transition text-white placeholder-gray-400">
+                    <button id="scan-btn" class="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 transition duration-300 flex items-center justify-center gap-2">
+                        <i data-lucide="camera"></i>
+                        <span>Scan ISBN</span>
+                    </button>
+                    <button id="lookup-btn" class="bg-gray-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-gray-700 transition duration-300 flex items-center justify-center gap-2">
+                         <i data-lucide="search"></i>
+                        <span>Lookup</span>
+                    </button>
+                </div>
+                 <div id="message-box" class="mt-4"></div>
+            </section>
+
+            <section id="result-section" class="hidden bg-gray-800 p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-semibold mb-4 text-white">Scan Result</h2>
+                <div id="book-result" class="flex flex-col md:flex-row gap-6"></div>
+                 <div id="result-actions" class="flex justify-end gap-4 mt-6">
+                    <button id="discard-btn" class="bg-red-600 text-white font-semibold py-2 px-5 rounded-md hover:bg-red-700 transition">Discard</button>
+                    <button id="keep-btn" class="bg-green-600 text-white font-semibold py-2 px-5 rounded-md hover:bg-green-700 transition">Keep</button>
+                </div>
+            </section>
+
+            <section id="collection-section" class="bg-gray-800 p-6 rounded-lg shadow-md">
+                <h2 class="text-2xl font-semibold mb-4 text-white">My Collection</h2>
+                <div class="flex flex-col md:flex-row gap-4 mb-6 pb-6 border-b border-gray-700">
+                    <div class="flex-grow">
+                        <label for="search-collection" class="sr-only">Search Collection</label>
+                        <input type="text" id="search-collection" placeholder="Search by title, author..." class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-green-500 text-white placeholder-gray-400">
+                    </div>
+                    <div>
+                        <label for="sort-by" class="sr-only">Sort By</label>
+                        <select id="sort-by" class="p-2 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-green-500 text-white">
+                            <option value="date_added_desc">Date Added (Newest)</option>
+                            <option value="date_added_asc">Date Added (Oldest)</option>
+                            <option value="title_asc">Title (A-Z)</option>
+                            <option value="title_desc">Title (Z-A)</option>
+                            <option value="author_asc">Author (A-Z)</option>
+                            <option value="price_desc">Price (High-Low)</option>
+                            <option value="price_asc">Price (Low-High)</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="collection-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                     <div id="loading-spinner" class="col-span-full flex justify-center items-center p-8">
+                        <i data-lucide="loader-2" class="animate-spin h-10 w-10 text-green-500"></i>
+                    </div>
+                </div>
+                 <p id="no-collection-msg" class="hidden text-center text-gray-500 py-8">Your collection is empty. Scan a book to get started!</p>
+            </section>
+        </main>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM Elements ---
+        const isbnInput = document.getElementById('isbn-input');
+        const lookupBtn = document.getElementById('lookup-btn');
+        const scanBtn = document.getElementById('scan-btn');
+        const resultSection = document.getElementById('result-section');
+        const bookResult = document.getElementById('book-result');
+        const keepBtn = document.getElementById('keep-btn');
+        const discardBtn = document.getElementById('discard-btn');
+        const collectionGrid = document.getElementById('collection-grid');
+        const noCollectionMsg = document.getElementById('no-collection-msg');
+        const searchCollectionInput = document.getElementById('search-collection');
+        const sortBySelect = document.getElementById('sort-by');
+        const messageBox = document.getElementById('message-box');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const scannerModal = document.getElementById('scanner-modal');
+        const videoElement = document.getElementById('scanner-video');
+        const closeScannerBtn = document.getElementById('close-scanner-btn');
+
+        // --- Supabase Setup ---
+        const SUPABASE_URL = 'https://zspprjeucjjilvaznysd.supabase.co'; 
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzcHByamV1Y2pqaWx2YXpueXNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA2MDQ3NjgsImV4cCI6MjA2NjE4MDc2OH0.l5x6ErWmb0eqU7Cqt6lEQXZWSSjOWRV8Ld3TlUXYxbk';
+        let db;
+
+        // --- Scanner Setup ---
+        let codeReader;
+        let isScannerInitialized = false;
+
+        // --- State Management ---
+        let collection = [];
+        let currentScannedBook = null;
+
+        // --- Initializer ---
+        function init() {
+            lucide.createIcons();
+            if (typeof supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
+                db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                fetchCollection();
+            } else {
+                showMessage('error', 'Could not connect to the database. Check configuration.', true);
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // --- Event Listeners ---
+        lookupBtn.addEventListener('click', () => lookupISBN(isbnInput.value));
+        discardBtn.addEventListener('click', clearResult);
+        keepBtn.addEventListener('click', keepBook);
+        searchCollectionInput.addEventListener('input', renderCollection);
+        sortBySelect.addEventListener('change', renderCollection);
+        scanBtn.addEventListener('click', startScanner);
+        closeScannerBtn.addEventListener('click', stopScanner);
+
+        // --- Scanner Functions ---
+        function initScanner() {
+            if (typeof ZXing === 'undefined') {
+                showMessage('error', 'Scanner library not loaded. Check network connection.', true);
+                return false;
+            }
+            codeReader = new ZXing.BrowserMultiFormatReader();
+            isScannerInitialized = true;
+            return true;
+        }
+
+        function startScanner() {
+            if (!isScannerInitialized) {
+                if (!initScanner()) return;
+            }
+            
+            // Requesting the rear-facing camera, ideal for mobile scanning.
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+                .then(stream => {
+                    videoElement.srcObject = stream;
+                    scannerModal.style.display = 'flex';
+                    lucide.createIcons();
+
+                    codeReader.decodeFromStream(stream, videoElement, (result, err) => {
+                        if (result) {
+                            // Check if the format is EAN-13 (most common for ISBNs)
+                            if (result.getBarcodeFormat() === ZXing.BarcodeFormat.EAN_13) {
+                                const scannedIsbn = result.getText();
+                                console.log('Scanned ISBN:', scannedIsbn);
+                                stopScanner();
+                                isbnInput.value = scannedIsbn;
+                                lookupISBN(scannedIsbn);
+                            }
+                        }
+                        if (err && !(err instanceof ZXing.NotFoundException)) {
+                            console.error('Scanner error:', err);
+                            showMessage('error', 'An error occurred with the scanner.');
+                            stopScanner();
+                        }
+                    });
+                })
+                .catch(err => {
+                    console.error('Camera access error:', err);
+                    showMessage('error', 'Could not access camera. Please grant permission.');
+                });
+        }
+
+        function stopScanner() {
+            if (codeReader) {
+                codeReader.reset();
+            }
+            if (videoElement.srcObject) {
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+            scannerModal.style.display = 'none';
+        }
+
+
+        // --- Core Functions ---
+        async function fetchCollection() {
+            if (!db) return;
+            loadingSpinner.classList.remove('hidden');
+            noCollectionMsg.classList.add('hidden');
+            collectionGrid.innerHTML = '';
+            
+            try {
+                const { data, error } = await db.from('books').select('*');
+                if (error) throw error;
+                collection = data.map(book => ({ ...book, marketPrice: book.market_price, publishDate: book.publish_date, coverUrl: book.cover_url, dateAdded: book.date_added }));
+                renderCollection();
+            } catch (error) {
+                console.error("Error fetching collection:", error);
+                showMessage('error', `Could not load collection. ${error.message}`);
+            } finally {
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        async function lookupISBN(isbnValue) {
+            if (!isbnValue) return;
+            const isbn = isbnValue.trim().replace(/-/g, '');
+            if (!/^(978|979)\d{10}$/.test(isbn) && !/^\d{10}$/.test(isbn)) {
+                showMessage('error', 'Please enter a valid 10 or 13-digit ISBN.');
+                return;
+            }
+
+            showMessage('info', 'Looking up ISBN...', true);
+
+            try {
+                const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&jscmd=data&format=json`);
+                if (!response.ok) throw new Error(`API returned status ${response.status}`);
+                const data = await response.json();
+                const bookData = data[`ISBN:${isbn}`];
+
+                if (!bookData) {
+                    showMessage('error', 'Book not found for this ISBN. Please check the number.');
+                    return;
+                }
+
+                currentScannedBook = processBookData(bookData, isbn);
+                displayResult(currentScannedBook);
+                showMessage('success', 'Book data loaded!');
+
+            } catch (error) {
+                console.error("Failed to fetch book data:", error);
+                showMessage('error', 'Could not retrieve book data. Please try again later.');
+            }
+        }
+        
+        function processBookData(apiData, isbn) {
+            const marketPrice = (Math.random() * (50 - 5) + 5).toFixed(2);
+            return {
+                id: `ISBN:${isbn}`,
+                title: apiData.title,
+                authors: apiData.authors ? apiData.authors.map(a => a.name).join(', ') : 'Unknown Author',
+                publishDate: apiData.publish_date || 'Unknown',
+                coverUrl: apiData.cover ? apiData.cover.large : 'https://placehold.co/300x450/374151/9ca3af?text=No+Cover',
+                marketPrice: parseFloat(marketPrice),
+            };
+        }
+
+        function displayResult(book) {
+            bookResult.innerHTML = `
+                <div class="flex-shrink-0">
+                    <img src="${book.coverUrl}" alt="Cover of ${book.title}" class="w-40 md:w-48 rounded-lg shadow-lg" onerror="this.onerror=null;this.src='https://placehold.co/300x450/374151/9ca3af?text=No+Cover';">
+                </div>
+                <div class="flex-grow">
+                    <h3 class="text-2xl font-bold text-white">${book.title}</h3>
+                    <p class="text-lg text-gray-300">${book.authors}</p>
+                    <p class="text-sm text-gray-400 mt-1">Published: ${book.publishDate}</p>
+                    <div class="mt-4 pt-4 border-t border-gray-700">
+                        <p class="text-lg font-semibold text-gray-300">Estimated Market Price:</p>
+                        <p class="text-3xl font-bold text-green-500">$${book.marketPrice.toFixed(2)}</p>
+                    </div>
+                </div>
+            `;
+            resultSection.classList.remove('hidden');
+        }
+
+        function clearResult() {
+            resultSection.classList.add('hidden');
+            bookResult.innerHTML = '';
+            isbnInput.value = '';
+            currentScannedBook = null;
+        }
+
+        async function keepBook() {
+            if (!currentScannedBook || !db) return;
+
+            if (collection.some(book => book.id === currentScannedBook.id)) {
+                showMessage('warning', `'${currentScannedBook.title}' is already in your collection.`);
+                clearResult();
+                return;
+            }
+
+            try {
+                const bookToInsert = {
+                    id: currentScannedBook.id,
+                    title: currentScannedBook.title,
+                    authors: currentScannedBook.authors,
+                    publish_date: currentScannedBook.publishDate,
+                    cover_url: currentScannedBook.coverUrl,
+                    market_price: currentScannedBook.marketPrice
+                };
+
+                const { error } = await db.from('books').insert(bookToInsert);
+                if (error) throw error;
+                
+                collection.push({ ...currentScannedBook, dateAdded: new Date().toISOString() });
+                showMessage('success', `'${currentScannedBook.title}' added to your collection!`);
+                renderCollection();
+                clearResult();
+
+            } catch (error) {
+                console.error('Error saving book:', error);
+                showMessage('error', `Failed to save book. Error: ${error.message}`);
+            }
+        }
+        
+        async function removeBookFromCollection(bookId) {
+            if (!db) return;
+            try {
+                const { error } = await db.from('books').delete().eq('id', bookId);
+                if (error) throw error;
+
+                const bookIndex = collection.findIndex(book => book.id === bookId);
+                if (bookIndex > -1) {
+                    const bookTitle = collection[bookIndex].title;
+                    collection.splice(bookIndex, 1);
+                    showMessage('info', `'${bookTitle}' removed from collection.`);
+                    renderCollection();
+                }
+            } catch (error) {
+                console.error('Error removing book:', error);
+                showMessage('error', `Failed to remove book. Error: ${error.message}`);
+            }
+        }
+
+        function renderCollection() {
+            collectionGrid.innerHTML = '';
+            loadingSpinner.classList.add('hidden');
+
+            const searchTerm = searchCollectionInput.value.toLowerCase();
+            const sortMethod = sortBySelect.value;
+            
+            let filteredCollection = collection.filter(book => 
+                (book.title && book.title.toLowerCase().includes(searchTerm)) ||
+                (book.authors && book.authors.toLowerCase().includes(searchTerm))
+            );
+
+            filteredCollection.sort((a, b) => {
+                const aVal = a.title || '';
+                const bVal = b.title || '';
+                const aAuth = a.authors || '';
+                const bAuth = b.authors || '';
+
+                switch (sortMethod) {
+                    case 'title_asc': return aVal.localeCompare(bVal);
+                    case 'title_desc': return bVal.localeCompare(aVal);
+                    case 'author_asc': return aAuth.localeCompare(bAuth);
+                    case 'author_desc': return bAuth.localeCompare(aAuth);
+                    case 'price_desc': return (b.marketPrice || 0) - (a.marketPrice || 0);
+                    case 'price_asc': return (a.marketPrice || 0) - (b.marketPrice || 0);
+                    case 'date_added_asc': return new Date(a.dateAdded) - new Date(b.dateAdded);
+                    default: return new Date(b.dateAdded) - new Date(a.dateAdded);
+                }
+            });
+
+            if (filteredCollection.length === 0) {
+                 if (collection.length > 0) {
+                    collectionGrid.innerHTML = `<p class="col-span-full text-center text-gray-500 py-8">No books match your search.</p>`;
+                 } else {
+                    noCollectionMsg.classList.remove('hidden');
+                 }
+            }
+            else {
+                noCollectionMsg.classList.add('hidden');
+                filteredCollection.forEach(book => {
+                    const card = document.createElement('div');
+                    card.className = 'book-card bg-gray-700/80 p-4 rounded-lg flex flex-col shadow-lg';
+                    card.innerHTML = `
+                        <img src="${book.coverUrl}" alt="Cover of ${book.title}" class="w-full h-48 object-contain rounded-md mb-4 bg-gray-800" onerror="this.onerror=null;this.src='https://placehold.co/200x300/374151/9ca3af?text=No+Cover';">
+                        <h4 class="font-bold text-md flex-grow text-gray-200">${book.title}</h4>
+                        <p class="text-sm text-gray-400">${book.authors || 'Unknown Author'}</p>
+                        <p class="font-semibold text-green-400 mt-2">$${book.marketPrice ? book.marketPrice.toFixed(2) : '0.00'}</p>
+                        <button class="remove-btn w-full mt-3 bg-red-900/60 text-red-300 text-sm py-1 rounded hover:bg-red-800/60 transition" data-id="${book.id}">Remove</button>
+                    `;
+                    collectionGrid.appendChild(card);
+                });
+            }
+            
+            document.querySelectorAll('.remove-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    removeBookFromCollection(e.target.getAttribute('data-id'));
+                });
+            });
+             lucide.createIcons();
+        }
+        
+        function showMessage(type, text, isSticky = false) {
+             messageBox.innerHTML = '';
+             const messageDiv = document.createElement('div');
+             let bgColor, textColor, icon;
+             
+             switch (type) {
+                case 'success':
+                    bgColor = 'bg-green-900/70 border border-green-700'; textColor = 'text-green-300'; icon = `<i data-lucide="check-circle" class="w-5 h-5"></i>`; break;
+                 case 'warning':
+                    bgColor = 'bg-yellow-900/70 border border-yellow-700'; textColor = 'text-yellow-300'; icon = `<i data-lucide="alert-triangle" class="w-5 h-5"></i>`; break;
+                case 'error':
+                    bgColor = 'bg-red-900/70 border border-red-700'; textColor = 'text-red-300'; icon = `<i data-lucide="x-circle" class="w-5 h-5"></i>`; break;
+                default:
+                    bgColor = 'bg-blue-900/70 border border-blue-700'; textColor = 'text-blue-300'; icon = `<i data-lucide="info" class="w-5 h-5"></i>`; break;
+             }
+             
+             messageDiv.className = `p-4 rounded-md flex items-center gap-3 ${bgColor} ${textColor}`;
+             messageDiv.innerHTML = `<span class="flex-shrink-0">${icon}</span> <span class="flex-grow">${text}</span>`;
+             messageBox.appendChild(messageDiv);
+             lucide.createIcons();
+             
+             if (!isSticky) {
+                setTimeout(() => {
+                    messageDiv.style.transition = 'opacity 0.5s ease';
+                    messageDiv.style.opacity = '0';
+                    setTimeout(() => messageBox.innerHTML = '', 500);
+                }, 4000);
+             }
+        }
+
+        // --- Initial Load ---
+        init();
+        
+    });
+    </script>
+</body>
+</html>
