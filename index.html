@@ -266,7 +266,6 @@
         dom.collectionGrid.addEventListener("click", (e) => {
           const toggleButton = e.target.closest(".accordion-toggle");
           if (toggleButton) {
-            // Prevent accordion from toggling if a button inside it was clicked.
             if (e.target.closest("button")) return; 
             toggleAccordion(toggleButton);
           }
@@ -286,7 +285,6 @@
                 dom.confirmModalText.textContent = text;
                 dom.confirmModal.style.display = 'flex';
 
-                // Use .onclick to ensure we don't stack multiple event listeners
                 dom.confirmModalCancelBtn.onclick = () => {
                     dom.confirmModal.style.display = 'none';
                     resolve(false);
@@ -300,48 +298,51 @@
         }
         
         // --- Core Functions ---
+        
+        async function removeBookRecord(bookIsbn) {
+            const confirmed = await showConfirmModal(
+                'Delete Book Record?',
+                'This will permanently delete this book record. This cannot be undone.'
+            );
+            if (!confirmed || !db) return;
+            
+            showMessage('info', 'Removing book record...', true);
+            const { error } = await db.from('books').delete().eq('id', bookIsbn);
+
+            if (error) {
+                showMessage('error', `Failed to remove book: ${error.message}`);
+            } else {
+                collection.delete(bookIsbn);
+                renderCollection();
+                showMessage('success', 'Book removed from collection.');
+            }
+        }
+
         async function removeCopy(copyId, bookIsbn) {
             if (!db) return;
 
-            const confirmed = await showConfirmModal(
-                'Remove Inventory Item?',
-                'This action will permanently delete this copy. This cannot be undone.'
-            );
+            const book = collection.get(bookIsbn);
+            if (!book) return; 
 
+            const isLastCopy = book.inventory.length === 1 && book.inventory[0].copy_id === copyId;
+            
+            const title = isLastCopy ? 'Delete Last Copy & Book?' : 'Remove Inventory Item?';
+            const text = isLastCopy ? 'This will permanently delete the book and its last copy. This cannot be undone.' : 'This will permanently delete this copy. This cannot be undone.';
+
+            const confirmed = await showConfirmModal(title, text);
             if (!confirmed) return;
 
-            const book = collection.get(bookIsbn);
-            if (!book) {
-                showMessage('error', 'Could not find book. Please refresh.');
-                return;
-            }
-
-            const isLastCopy = book.inventory.length === 1;
-
             if (isLastCopy) {
-                showMessage('info', 'Removing last copy and book record...', true);
-                // This is the last copy, so we delete the main book record.
-                // The ON DELETE CASCADE setting in the database schema will automatically
-                // delete the final inventory item associated with it.
-                const { error } = await db.from("books").delete().eq("id", bookIsbn);
-
-                if (error) {
-                    showMessage("error", `Failed to remove book: ${error.message}`);
-                } else {
-                    // On success, update the local state and re-render the UI.
-                    collection.delete(bookIsbn);
-                    renderCollection();
-                    showMessage("success", "Book removed from collection.");
-                }
+                // If it's the last copy, we delete the entire book record.
+                await removeBookRecord(bookIsbn);
             } else {
+                // Otherwise, just delete the specific copy.
                 showMessage('info', 'Removing copy...', true);
-                // This is not the last copy, so we only delete the specific inventory item.
                 const { error } = await db.from("inventory").delete().eq("copy_id", copyId);
-
+                
                 if (error) {
                     showMessage("error", `Failed to remove copy: ${error.message}`);
                 } else {
-                    // On success, update the local state and re-render the UI.
                     book.inventory = book.inventory.filter(copy => copy.copy_id !== copyId);
                     renderCollection();
                     showMessage("success", "Copy removed from inventory.");
@@ -352,44 +353,31 @@
         async function toggleListedStatus(copyId, currentStatus, buttonEl) {
           if (!db) return;
           const newStatus = !currentStatus;
-
-          // Optimistic UI update
           buttonEl.dataset.isListed = newStatus;
-          buttonEl.innerHTML = `<i data-lucide="${
-            newStatus ? "check-circle-2" : "circle-dashed"
-          }" class="w-4 h-4 mr-1"></i> ${newStatus ? "Listed" : "Unlisted"}`;
+          buttonEl.innerHTML = `<i data-lucide="${newStatus ? "check-circle-2" : "circle-dashed"}" class="w-4 h-4 mr-1"></i> ${newStatus ? "Listed" : "Unlisted"}`;
           buttonEl.classList.toggle("bg-green-900", newStatus);
           buttonEl.classList.toggle("text-green-300", newStatus);
           buttonEl.classList.toggle("bg-gray-600", !newStatus);
           buttonEl.classList.toggle("text-gray-300", !newStatus);
           lucide.createIcons();
 
-          const { error } = await db
-            .from("inventory")
-            .update({ is_listed: newStatus })
-            .eq("copy_id", copyId);
+          const { error } = await db.from("inventory").update({ is_listed: newStatus }).eq("copy_id", copyId);
 
           if (error) {
             showMessage("error", `Failed to update status: ${error.message}`);
-            // Revert UI on error
+            // Revert on error
             buttonEl.dataset.isListed = currentStatus;
-            buttonEl.innerHTML = `<i data-lucide="${
-              currentStatus ? "check-circle-2" : "circle-dashed"
-            }" class="w-4 h-4 mr-1"></i> ${
-              currentStatus ? "Listed" : "Unlisted"
-            }`;
+            buttonEl.innerHTML = `<i data-lucide="${currentStatus ? "check-circle-2" : "circle-dashed"}" class="w-4 h-4 mr-1"></i> ${currentStatus ? "Listed" : "Unlisted"}`;
             buttonEl.classList.toggle("bg-green-900", currentStatus);
             buttonEl.classList.toggle("text-green-300", currentStatus);
             buttonEl.classList.toggle("bg-gray-600", !currentStatus);
             buttonEl.classList.toggle("text-gray-300", !currentStatus);
             lucide.createIcons();
           } else {
-            for (const book of collection.values()) {
-              const item = book.inventory.find((inv) => inv.copy_id === copyId);
-              if (item) {
-                item.is_listed = newStatus;
-                break;
-              }
+            const book = Array.from(collection.values()).find(b => b.inventory.some(i => i.copy_id === copyId));
+            if(book) {
+                const item = book.inventory.find(i => i.copy_id === copyId);
+                if (item) item.is_listed = newStatus;
             }
           }
         }
@@ -400,18 +388,13 @@
           const dbIsbn = `ISBN:${cleanIsbn}`;
 
           if (collection.has(dbIsbn)) {
-            showMessage(
-              "info",
-              "This book is already in your collection. Add another copy below."
-            );
+            showMessage("info", "This book is already in your collection. Add another copy below.");
             showAddCopyForm(dbIsbn);
             return;
           }
 
           showMessage("info", "Looking up new book from Google Books...", true);
-          const response = await fetch(
-            `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`
-          );
+          const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
           if (!response.ok) {
             showMessage("error", "Error connecting to Google Books.");
             return;
@@ -424,11 +407,7 @@
           }
 
           const bookData = data.items[0].volumeInfo;
-          const coverUrl =
-            bookData.imageLinks?.thumbnail
-              ?.replace("&edge=curl", "")
-              .replace("http://", "https://") ||
-            "https://placehold.co/300x450/374151/9ca3af?text=No+Cover";
+          const coverUrl = bookData.imageLinks?.thumbnail?.replace("&edge=curl", "").replace("http://", "https://") || "https://placehold.co/300x450/374151/9ca3af?text=No+Cover";
 
           const newBook = {
             id: dbIsbn,
@@ -439,14 +418,9 @@
             cover_url: coverUrl,
           };
 
-          const { error } = await db
-            .from("books")
-            .upsert(newBook, { onConflict: "id" });
+          const { error } = await db.from("books").upsert(newBook, { onConflict: "id" });
           if (error) {
-            showMessage(
-              "error",
-              `Could not save book record: ${error.message}`
-            );
+            showMessage("error", `Could not save book record: ${error.message}`);
             return;
           }
 
@@ -459,10 +433,7 @@
         async function fetchCollection() {
           if (!db) return;
           dom.loadingSpinner.style.display = "flex";
-          const { data, error } = await db
-            .from("books")
-            .select(`*, inventory (*)`)
-            .order("title");
+          const { data, error } = await db.from("books").select(`*, inventory (*)`).order("title");
           if (error) {
             showMessage("error", `Could not load collection: ${error.message}`);
           } else {
@@ -479,34 +450,31 @@
           const newCopy = {
             book_isbn: bookIsbn,
             condition: form.elements.condition.value || null,
-            purchase_price: form.elements.purchase_price.value
-              ? parseFloat(form.elements.purchase_price.value)
-              : null,
-            market_price: form.elements.market_price.value
-              ? parseFloat(form.elements.market_price.value)
-              : null,
+            purchase_price: form.elements.purchase_price.value ? parseFloat(form.elements.purchase_price.value) : null,
+            market_price: form.elements.market_price.value ? parseFloat(form.elements.market_price.value) : null,
             date_purchased: form.elements.date_purchased.value || null,
             location_purchased: form.elements.location_purchased.value || null,
             notes: form.elements.notes.value || null,
             is_listed: form.elements.is_listed.checked,
           };
-          const { error } = await db.from("inventory").insert([newCopy]);
+          const { data, error } = await db.from("inventory").insert(newCopy).select();
           if (error) {
             showMessage("error", `Could not add copy: ${error.message}`);
             return;
           }
           showMessage("success", "New copy added to inventory!");
           dom.addCopyModal.style.display = "none";
-          // We must refetch the collection to get the new copy_id and other details.
-          await fetchCollection();
+          const book = collection.get(bookIsbn);
+          if (book) {
+              book.inventory.push(data[0]);
+              renderCollection();
+          } else {
+              await fetchCollection();
+          }
         }
 
         function renderCollection() {
-          const openAccordions = new Set();
-          document.querySelectorAll(".accordion-toggle.open").forEach((el) => {
-            openAccordions.add(el.dataset.bookId);
-          });
-
+          const openAccordions = new Set(Array.from(document.querySelectorAll(".accordion-toggle.open")).map(el => el.dataset.bookId));
           dom.collectionGrid.innerHTML = "";
           if (collection.size === 0) {
             dom.noCollectionMsg.style.display = "block";
@@ -514,101 +482,66 @@
           }
           dom.noCollectionMsg.style.display = "none";
 
-          const sortedCollection = [...collection.values()].sort((a, b) =>
-            a.title.localeCompare(b.title)
-          );
+          const sortedCollection = [...collection.values()].sort((a, b) => a.title.localeCompare(b.title));
 
           for (const book of sortedCollection) {
             const bookEntryDiv = document.createElement("div");
-            bookEntryDiv.className =
-              "bg-gray-700/80 rounded-lg shadow-lg overflow-hidden";
+            bookEntryDiv.className = "bg-gray-700/80 rounded-lg shadow-lg overflow-hidden";
             const hasInventory = book.inventory && book.inventory.length > 0;
+            
+            let deleteButtonHtml = '';
+            if (!hasInventory) {
+                // ADDED: Delete button on main card for zero-copy books for cleanup
+                deleteButtonHtml = `<button class="delete-book-btn absolute top-2 right-2 p-1.5 text-red-500/70 hover:text-red-400 hover:bg-gray-800/50 rounded-full" data-book-isbn="${book.id}"><i data-lucide="trash-2" class="w-5 h-5"></i></button>`;
+            }
 
-            let copiesHtml =
-              '<div class="accordion-content p-4 pt-0"><div class="space-y-3">';
+            let copiesHtml = '<div class="accordion-content p-4 pt-0"><div class="space-y-3">';
             if (hasInventory) {
-              const sortedInventory = book.inventory.sort(
-                (a, b) =>
-                  new Date(b.date_purchased) - new Date(a.date_purchased)
-              );
-              copiesHtml += sortedInventory
-                .map((copy) => {
-                  const listedStatusBtn = `<button class="toggle-listed-btn flex items-center rounded-full py-1 px-2 text-xs ${
-                    copy.is_listed
-                      ? "bg-green-900 text-green-300"
-                      : "bg-gray-600 text-gray-300"
-                  } hover:opacity-80 transition-colors" data-copy-id="${
-                    copy.copy_id
-                  }" data-is-listed="${copy.is_listed}"><i data-lucide="${
-                    copy.is_listed ? "check-circle-2" : "circle-dashed"
-                  }" class="w-4 h-4 mr-1"></i> ${
-                    copy.is_listed ? "Listed" : "Unlisted"
-                  }</button>`;
-                  return `<div class="p-3 bg-gray-800/60 rounded-md text-sm"><div class="flex justify-between items-start gap-2"><div><p><strong>Condition:</strong> ${
-                    copy.condition || "N/A"
-                  }</p><p><strong>Cost:</strong> $${(
-                    copy.purchase_price || 0
-                  ).toFixed(2)} | <strong>Market:</strong> $${(
-                    copy.market_price || 0
-                  ).toFixed(2)}</p><p class="text-xs text-gray-400 mt-1">${
-                    copy.date_purchased || ""
-                  } @ ${copy.location_purchased || "N/A"}</p>${
-                    copy.notes
-                      ? `<p class="mt-2 text-xs text-gray-300 italic">“${copy.notes}”</p>`
-                      : ""
-                  }</div><div class="text-right flex-shrink-0 space-y-2 flex flex-col items-end">${listedStatusBtn}<button class="remove-copy-btn p-1 text-red-400 hover:text-red-300" data-copy-id="${
-                    copy.copy_id
-                  }" data-book-isbn="${book.id}"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`;
-                })
-                .join("");
+              const sortedInventory = [...book.inventory].sort((a, b) => new Date(b.date_purchased) - new Date(a.date_purchased));
+              copiesHtml += sortedInventory.map((copy) => {
+                  const listedStatusBtn = `<button class="toggle-listed-btn flex items-center rounded-full py-1 px-2 text-xs ${copy.is_listed ? "bg-green-900 text-green-300" : "bg-gray-600 text-gray-300"} hover:opacity-80 transition-colors" data-copy-id="${copy.copy_id}" data-is-listed="${copy.is_listed}"><i data-lucide="${copy.is_listed ? "check-circle-2" : "circle-dashed"}" class="w-4 h-4 mr-1"></i> ${copy.is_listed ? "Listed" : "Unlisted"}</button>`;
+                  return `<div class="p-3 bg-gray-800/60 rounded-md text-sm"><div class="flex justify-between items-start gap-2"><div><p><strong>Condition:</strong> ${copy.condition || "N/A"}</p><p><strong>Cost:</strong> $${(copy.purchase_price || 0).toFixed(2)} | <strong>Market:</strong> $${(copy.market_price || 0).toFixed(2)}</p><p class="text-xs text-gray-400 mt-1">${copy.date_purchased || ""} @ ${copy.location_purchased || "N/A"}</p>${copy.notes ? `<p class="mt-2 text-xs text-gray-300 italic">“${copy.notes}”</p>` : ""}</div><div class="text-right flex-shrink-0 space-y-2 flex flex-col items-end">${listedStatusBtn}<button class="remove-copy-btn p-1 text-red-400 hover:text-red-300" data-copy-id="${copy.copy_id}" data-book-isbn="${book.id}"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`;
+                }).join("");
             } else {
               copiesHtml += `<p class="text-xs text-center text-gray-500 py-2">No copies in inventory. <button class="add-first-copy-btn text-green-400 underline" data-isbn="${book.id}">Add first copy.</button></p>`;
             }
             copiesHtml += "</div></div>";
 
-            bookEntryDiv.innerHTML = `<div class="accordion-toggle p-4 flex gap-4 cursor-pointer hover:bg-gray-700" data-book-id="${
-              book.id
-            }"><img src="${book.cover_url}" alt="Cover for ${
-              book.title
-            }" class="w-24 h-36 object-cover rounded-md bg-gray-800 flex-shrink-0"><div class="flex-grow space-y-1"><h4 class="font-bold text-lg text-gray-100">${
-              book.title
-            }</h4><p class="font-mono text-base text-green-400">${book.id.replace(
-              /^(ISBN:|MANUAL-)/,
-              ""
-            )}</p><p class="text-sm text-gray-300">${
-              book.publisher || "N/A"
-            } - ${
-              book.binding || "N/A"
-            }</p><p class="text-sm text-gray-400 pt-2">${
-              book.authors || "N/A"
-            }</p></div><div class="flex flex-col items-center justify-center flex-shrink-0 px-2 text-center"><span class="text-2xl font-bold">${
-              book.inventory ? book.inventory.length : 0
-            }</span><span class="text-xs text-gray-400 uppercase tracking-wider">Copies</span>${
-              hasInventory
-                ? '<i data-lucide="chevron-down" class="chevron-icon mt-2 text-gray-400"></i>'
-                : ""
-            }</div></div>${copiesHtml}`;
+            bookEntryDiv.innerHTML = `<div class="accordion-toggle relative p-4 flex gap-4 cursor-pointer hover:bg-gray-700" data-book-id="${book.id}">
+                ${deleteButtonHtml}
+                <img src="${book.cover_url}" onerror="this.onerror=null;this.src='https://placehold.co/300x450/374151/9ca3af?text=No+Cover';" alt="Cover for ${book.title}" class="w-24 h-36 object-cover rounded-md bg-gray-800 flex-shrink-0">
+                <div class="flex-grow space-y-1">
+                    <h4 class="font-bold text-lg text-gray-100">${book.title}</h4>
+                    <p class="font-mono text-base text-green-400">${book.id.replace(/^(ISBN:|MANUAL-)/, "")}</p>
+                    <p class="text-sm text-gray-300">${book.publisher || "N/A"} - ${book.binding || "N/A"}</p>
+                    <p class="text-sm text-gray-400 pt-2">${book.authors || "N/A"}</p>
+                </div>
+                <div class="flex flex-col items-center justify-center flex-shrink-0 px-2 text-center">
+                    <span class="text-2xl font-bold">${book.inventory ? book.inventory.length : 0}</span>
+                    <span class="text-xs text-gray-400 uppercase tracking-wider">Copies</span>
+                    ${hasInventory ? '<i data-lucide="chevron-down" class="chevron-icon mt-2 text-gray-400"></i>' : ""}
+                </div>
+            </div>${copiesHtml}`;
             dom.collectionGrid.appendChild(bookEntryDiv);
           }
           
           // --- Re-attach all event listeners after re-rendering ---
+          document.querySelectorAll(".delete-book-btn").forEach((btn) =>
+            btn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              removeBookRecord(e.currentTarget.dataset.bookIsbn);
+            })
+          );
           document.querySelectorAll(".toggle-listed-btn").forEach((btn) =>
             btn.addEventListener("click", (e) => {
               e.stopPropagation();
-              toggleListedStatus(
-                e.currentTarget.dataset.copyId,
-                e.currentTarget.dataset.isListed === "true",
-                e.currentTarget
-              );
+              toggleListedStatus(e.currentTarget.dataset.copyId, e.currentTarget.dataset.isListed === "true", e.currentTarget);
             })
           );
           document.querySelectorAll(".remove-copy-btn").forEach((btn) =>
             btn.addEventListener("click", (e) => {
               e.stopPropagation();
-              removeCopy(
-                e.currentTarget.dataset.copyId,
-                e.currentTarget.dataset.bookIsbn
-              );
+              removeCopy(e.currentTarget.dataset.copyId, e.currentTarget.dataset.bookIsbn);
             })
           );
           document.querySelectorAll(".add-first-copy-btn").forEach((btn) =>
@@ -618,7 +551,6 @@
             })
           );
           
-          // Restore open accordions
           document.querySelectorAll(".accordion-toggle").forEach((toggle) => {
             if (openAccordions.has(toggle.dataset.bookId)) {
               toggle.classList.add("open");
