@@ -21,3 +21,28 @@ CREATE POLICY "Public user can manage all books"
   FOR ALL
   USING (true)
   WITH CHECK (true);
+
+-- Create the new table for individual inventory copies
+CREATE TABLE inventory (
+  copy_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- A unique ID for each specific copy
+  book_isbn TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE, -- Links to the books table
+  condition TEXT,
+  purchase_price REAL,
+  notes TEXT,
+  date_added TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- Enable Row Level Security (RLS) on the new table
+ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
+
+-- Create a policy that allows public users to manage all inventory items
+CREATE POLICY "Public user can manage all inventory"
+  ON inventory
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
+-- Optional: If you want to remove the price and date from the original 'books' table 
+-- as it's now handled by the 'inventory' table, you can run these lines too.
+-- ALTER TABLE books DROP COLUMN IF EXISTS market_price;
+-- ALTER TABLE books DROP COLUMN IF EXISTS date_added;
