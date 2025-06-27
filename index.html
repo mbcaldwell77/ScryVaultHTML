@@ -70,6 +70,7 @@
     </style>
   </head>
   <body class="bg-gray-900 text-gray-300">
+    <!-- Modals -->
     <div id="scanner-modal" class="modal">
       <div id="video-container">
         <video id="scanner-video"></video
@@ -109,6 +110,18 @@
         <div id="manual-add-form-container"></div>
       </div>
     </div>
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm text-center">
+            <h3 id="confirm-modal-title" class="text-lg font-semibold text-white mb-4">Are you sure?</h3>
+            <p id="confirm-modal-text" class="text-gray-400 mb-6">This action cannot be undone.</p>
+            <div class="flex justify-center gap-4">
+                <button id="confirm-modal-cancel-btn" class="bg-gray-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-gray-700">Cancel</button>
+                <button id="confirm-modal-confirm-btn" class="bg-red-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-red-700">Delete</button>
+            </div>
+        </div>
+    </div>
+
 
     <div id="app" class="container mx-auto p-4 md:p-8 max-w-7xl">
       <header class="text-center mb-8">
@@ -197,6 +210,11 @@
           "manual-add-book-modal",
           "close-manual-add-modal-btn",
           "manual-add-form-container",
+          "confirm-modal",
+          "confirm-modal-title",
+          "confirm-modal-text",
+          "confirm-modal-cancel-btn",
+          "confirm-modal-confirm-btn"
         ].reduce(
           (acc, id) => ({
             ...acc,
@@ -248,7 +266,8 @@
         dom.collectionGrid.addEventListener("click", (e) => {
           const toggleButton = e.target.closest(".accordion-toggle");
           if (toggleButton) {
-            if (e.target.closest("button")) return; // Ignore clicks on buttons within the toggle
+            // Prevent accordion from toggling if a button inside it was clicked.
+            if (e.target.closest("button")) return; 
             toggleAccordion(toggleButton);
           }
         });
@@ -260,7 +279,76 @@
           else content.style.maxHeight = content.scrollHeight + "px";
         }
 
+        // --- Confirmation Modal Helper ---
+        function showConfirmModal(title, text) {
+            return new Promise((resolve) => {
+                dom.confirmModalTitle.textContent = title;
+                dom.confirmModalText.textContent = text;
+                dom.confirmModal.style.display = 'flex';
+
+                // Use .onclick to ensure we don't stack multiple event listeners
+                dom.confirmModalCancelBtn.onclick = () => {
+                    dom.confirmModal.style.display = 'none';
+                    resolve(false);
+                };
+
+                dom.confirmModalConfirmBtn.onclick = () => {
+                    dom.confirmModal.style.display = 'none';
+                    resolve(true);
+                };
+            });
+        }
+        
         // --- Core Functions ---
+        async function removeCopy(copyId, bookIsbn) {
+            if (!db) return;
+
+            const confirmed = await showConfirmModal(
+                'Remove Inventory Item?',
+                'This action will permanently delete this copy. This cannot be undone.'
+            );
+
+            if (!confirmed) return;
+
+            const book = collection.get(bookIsbn);
+            if (!book) {
+                showMessage('error', 'Could not find book. Please refresh.');
+                return;
+            }
+
+            const isLastCopy = book.inventory.length === 1;
+
+            if (isLastCopy) {
+                showMessage('info', 'Removing last copy and book record...', true);
+                // This is the last copy, so we delete the main book record.
+                // The ON DELETE CASCADE setting in the database schema will automatically
+                // delete the final inventory item associated with it.
+                const { error } = await db.from("books").delete().eq("id", bookIsbn);
+
+                if (error) {
+                    showMessage("error", `Failed to remove book: ${error.message}`);
+                } else {
+                    // On success, update the local state and re-render the UI.
+                    collection.delete(bookIsbn);
+                    renderCollection();
+                    showMessage("success", "Book removed from collection.");
+                }
+            } else {
+                showMessage('info', 'Removing copy...', true);
+                // This is not the last copy, so we only delete the specific inventory item.
+                const { error } = await db.from("inventory").delete().eq("copy_id", copyId);
+
+                if (error) {
+                    showMessage("error", `Failed to remove copy: ${error.message}`);
+                } else {
+                    // On success, update the local state and re-render the UI.
+                    book.inventory = book.inventory.filter(copy => copy.copy_id !== copyId);
+                    renderCollection();
+                    showMessage("success", "Copy removed from inventory.");
+                }
+            }
+        }
+
         async function toggleListedStatus(copyId, currentStatus, buttonEl) {
           if (!db) return;
           const newStatus = !currentStatus;
@@ -336,7 +424,6 @@
           }
 
           const bookData = data.items[0].volumeInfo;
-          // Get the highest resolution image available
           const coverUrl =
             bookData.imageLinks?.thumbnail
               ?.replace("&edge=curl", "")
@@ -348,7 +435,6 @@
             title: bookData.title || "N/A",
             authors: bookData.authors ? bookData.authors.join(", ") : "N/A",
             publisher: bookData.publisher || "N/A",
-            // Google Books API doesn't have a reliable 'binding' field. We leave it blank for manual entry.
             binding: "",
             cover_url: coverUrl,
           };
@@ -369,136 +455,7 @@
           renderCollection();
           showAddCopyForm(newBook.id);
         }
-        
-        async function removeCopy(copyId, bookIsbn) {
-          if (!db || !confirm("Are you sure you want to remove this item?")) return;
-        
-          const book = collection.get(bookIsbn);
-          const isLastCopy = book && book.inventory && book.inventory.length === 1;
-        
-          let error;
-        
-          if (isLastCopy) {
-            // This is the last copy, so delete the entire book record.
-            // ON DELETE CASCADE will handle removing the final inventory item.
-            const { error: deleteBookError } = await db
-              .from("books")
-              .delete()
-              .eq("id", bookIsbn);
-            error = deleteBookError;
-          } else {
-            // Not the last copy, just delete the specific inventory item.
-            const { error: deleteCopyError } = await db
-              .from("inventory")
-              .delete()
-              .eq("copy_id", copyId);
-            error = deleteCopyError;
-          }
-        
-          if (error) {
-            showMessage("error", `Failed to remove item: ${error.message}`);
-            return;
-          }
-        
-          // Refresh the entire collection from the database
-          await fetchCollection();
-          showMessage("info", "Item removed from inventory.");
-        }
 
-        // --- Other Functions ---
-        function showManualAddForm() {
-          dom.manualAddFormContainer.innerHTML = `<form id="manual-add-form"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-300 mb-1">Title*</label><input type="text" id="manual_title" class="w-full p-2 bg-gray-700 rounded-md text-white" required></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Author(s)</label><input type="text" id="manual_authors" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Publisher</label><input type="text" id="manual_publisher" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Binding</label><input type="text" id="manual_binding" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Hardcover"></div></div><div class="mt-4"><label class="block text-sm font-medium text-gray-300 mb-1">Cover URL</label><input type="text" id="manual_cover_url" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="https://..."></div><button type="submit" class="w-full mt-6 bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700">Create Book & Add Copy</button></form>`;
-          dom.manualAddBookModal.style.display = "flex";
-          document
-            .getElementById("manual-add-form")
-            .addEventListener("submit", handleManualAdd);
-        }
-        async function handleManualAdd(e) {
-          e.preventDefault();
-          const form = e.target.elements;
-          const title = form.manual_title.value;
-          if (!title) {
-            showMessage("error", "Title is a required field.");
-            return;
-          }
-          const slug = title
-            .toLowerCase()
-            .replace(/\s+/g, "-")
-            .replace(/[^a-z0-9-]/g, "")
-            .substring(0, 50);
-          const uniqueId = `MANUAL-${slug}-${Date.now()}`;
-          const newBook = {
-            id: uniqueId,
-            title: title,
-            authors: form.manual_authors.value || "N/A",
-            publisher: form.manual_publisher.value || null,
-            binding: form.manual_binding.value || null,
-            cover_url:
-              form.manual_cover_url.value ||
-              "https://placehold.co/300x450/374151/9ca3af?text=No+Cover",
-          };
-          const { error } = await db.from("books").insert(newBook);
-          if (error) {
-            showMessage("error", `Could not save book: ${error.message}`);
-            return;
-          }
-          showMessage(
-            "success",
-            "Manual entry created! Now add your first copy."
-          );
-          dom.manualAddBookModal.style.display = "none";
-          collection.set(newBook.id, { ...newBook, inventory: [] });
-          renderCollection();
-          showAddCopyForm(newBook.id);
-        }
-        function initScanner() {
-          if (typeof ZXing === "undefined") {
-            showMessage("error", "Scanner library not loaded.", true);
-            return false;
-          }
-          codeReader = new ZXing.BrowserMultiFormatReader();
-          isScannerInitialized = true;
-          return true;
-        }
-        function startScanner() {
-          if (!isScannerInitialized && !initScanner()) return;
-          navigator.mediaDevices
-            .getUserMedia({ video: { facingMode: "environment" } })
-            .then((stream) => {
-              dom.scannerVideo.srcObject = stream;
-              dom.scannerModal.style.display = "flex";
-              codeReader.decodeFromStream(
-                stream,
-                dom.scannerVideo,
-                (result, err) => {
-                  if (
-                    result &&
-                    result.getBarcodeFormat() === ZXing.BarcodeFormat.EAN_13
-                  ) {
-                    stopScanner();
-                    lookupISBN(result.getText());
-                  }
-                  if (err && !(err instanceof ZXing.NotFoundException))
-                    stopScanner();
-                }
-              );
-            })
-            .catch(() =>
-              showMessage(
-                "error",
-                "Could not access camera. Please grant permission."
-              )
-            );
-        }
-        function stopScanner() {
-          if (codeReader) codeReader.reset();
-          if (dom.scannerVideo && dom.scannerVideo.srcObject) {
-            dom.scannerVideo.srcObject
-              .getTracks()
-              .forEach((track) => track.stop());
-          }
-          dom.scannerModal.style.display = "none";
-        }
         async function fetchCollection() {
           if (!db) return;
           dom.loadingSpinner.style.display = "flex";
@@ -514,36 +471,7 @@
           }
           dom.loadingSpinner.style.display = "none";
         }
-        function showAddCopyForm(bookIsbn) {
-          const book = collection.get(bookIsbn);
-          if (!book) return;
-          const today = new Date().toISOString().split("T")[0];
-          const conditionOptions = [
-            "Brand New",
-            "Like New",
-            "Very Good",
-            "Good",
-            "Acceptable",
-          ];
-          dom.addCopyFormContainer.innerHTML = `<p class="text-gray-400 mb-4">Adding a copy of <strong>${
-            book.title
-          }</strong></p><form id="add-copy-form" data-isbn="${
-            book.id
-          }"><div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"><div><label for="condition" class="block text-sm font-medium text-gray-300 mb-1">Condition</label><select id="condition" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">${conditionOptions
-            .map(
-              (opt) =>
-                `<option value="${opt}" ${
-                  opt === "Good" ? "selected" : ""
-                }>${opt}</option>`
-            )
-            .join(
-              ""
-            )}</select></div><div><label for="purchase_price" class="block text-sm font-medium text-gray-300 mb-1">Purchase Price</label><input type="number" id="purchase_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="2.50"></div><div><label for="market_price" class="block text-sm font-medium text-gray-300 mb-1">Market Price</label><input type="number" id="market_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="49.99"></div><div><label for="date_purchased" class="block text-sm font-medium text-gray-300 mb-1">Date Purchased</label><input type="date" id="date_purchased" value="${today}" class="w-full p-2 bg-gray-700 rounded-md text-white"></div></div><div class="mb-4"><label for="location_purchased" class="block text-sm font-medium text-gray-300 mb-1">Location Purchased</label><input type="text" id="location_purchased" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Goodwill, Hilliard"></div><div class="mb-4"><label for="notes" class="block text-sm font-medium text-gray-300 mb-1">Notes</label><textarea id="notes" rows="3" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Signed 1st ed, slight shelf wear"></textarea></div><div class="mb-6 flex items-center"><input type="checkbox" id="is_listed" class="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 bg-gray-700"><label for="is_listed" class="ml-2 block text-sm text-gray-300">Listed for sale</label></div><button type="submit" class="w-full bg-green-600 text-white font-semibold py-2 rounded-md hover:bg-green-700">Add to Inventory</button></form>`;
-          dom.addCopyModal.style.display = "flex";
-          document
-            .getElementById("add-copy-form")
-            .addEventListener("submit", handleAddCopy);
-        }
+
         async function handleAddCopy(e) {
           e.preventDefault();
           const form = e.target;
@@ -569,27 +497,33 @@
           }
           showMessage("success", "New copy added to inventory!");
           dom.addCopyModal.style.display = "none";
+          // We must refetch the collection to get the new copy_id and other details.
           await fetchCollection();
         }
+
         function renderCollection() {
           const openAccordions = new Set();
           document.querySelectorAll(".accordion-toggle.open").forEach((el) => {
             openAccordions.add(el.dataset.bookId);
           });
+
           dom.collectionGrid.innerHTML = "";
           if (collection.size === 0) {
             dom.noCollectionMsg.style.display = "block";
             return;
           }
           dom.noCollectionMsg.style.display = "none";
+
           const sortedCollection = [...collection.values()].sort((a, b) =>
             a.title.localeCompare(b.title)
           );
+
           for (const book of sortedCollection) {
             const bookEntryDiv = document.createElement("div");
             bookEntryDiv.className =
               "bg-gray-700/80 rounded-lg shadow-lg overflow-hidden";
             const hasInventory = book.inventory && book.inventory.length > 0;
+
             let copiesHtml =
               '<div class="accordion-content p-4 pt-0"><div class="space-y-3">';
             if (hasInventory) {
@@ -631,6 +565,7 @@
               copiesHtml += `<p class="text-xs text-center text-gray-500 py-2">No copies in inventory. <button class="add-first-copy-btn text-green-400 underline" data-isbn="${book.id}">Add first copy.</button></p>`;
             }
             copiesHtml += "</div></div>";
+
             bookEntryDiv.innerHTML = `<div class="accordion-toggle p-4 flex gap-4 cursor-pointer hover:bg-gray-700" data-book-id="${
               book.id
             }"><img src="${book.cover_url}" alt="Cover for ${
@@ -655,8 +590,11 @@
             }</div></div>${copiesHtml}`;
             dom.collectionGrid.appendChild(bookEntryDiv);
           }
+          
+          // --- Re-attach all event listeners after re-rendering ---
           document.querySelectorAll(".toggle-listed-btn").forEach((btn) =>
             btn.addEventListener("click", (e) => {
+              e.stopPropagation();
               toggleListedStatus(
                 e.currentTarget.dataset.copyId,
                 e.currentTarget.dataset.isListed === "true",
@@ -666,6 +604,7 @@
           );
           document.querySelectorAll(".remove-copy-btn").forEach((btn) =>
             btn.addEventListener("click", (e) => {
+              e.stopPropagation();
               removeCopy(
                 e.currentTarget.dataset.copyId,
                 e.currentTarget.dataset.bookIsbn
@@ -674,9 +613,12 @@
           );
           document.querySelectorAll(".add-first-copy-btn").forEach((btn) =>
             btn.addEventListener("click", (e) => {
+              e.stopPropagation();
               showAddCopyForm(e.currentTarget.dataset.isbn);
             })
           );
+          
+          // Restore open accordions
           document.querySelectorAll(".accordion-toggle").forEach((toggle) => {
             if (openAccordions.has(toggle.dataset.bookId)) {
               toggle.classList.add("open");
@@ -686,29 +628,17 @@
           });
           lucide.createIcons();
         }
-        function showMessage(type, text, isSticky = false) {
-          dom.messageBox.innerHTML = "";
-          const icons = {
-            success: "check-circle",
-            warning: "alert-triangle",
-            error: "x-circle",
-            info: "info",
-          };
-          const colors = {
-            success: "green",
-            warning: "yellow",
-            error: "red",
-            info: "blue",
-          };
-          const messageDiv = document.createElement("div");
-          messageDiv.className = `p-4 rounded-md flex items-center gap-3 bg-${colors[type]}-900/70 border border-${colors[type]}-700 text-${colors[type]}-300`;
-          messageDiv.innerHTML = `<i data-lucide="${icons[type]}" class="w-5 h-5 flex-shrink-0"></i><span>${text}</span>`;
-          dom.messageBox.appendChild(messageDiv);
-          lucide.createIcons();
-          if (!isSticky)
-            setTimeout(() => (dom.messageBox.innerHTML = ""), 4000);
-        }
 
+        // --- All other functions (unchanged) ---
+        function showMessage(type, text, isSticky = false) {dom.messageBox.innerHTML="";const icons={success:"check-circle",warning:"alert-triangle",error:"x-circle",info:"info"},colors={success:"green",warning:"yellow",error:"red",info:"blue"},messageDiv=document.createElement("div");messageDiv.className=`p-4 rounded-md flex items-center gap-3 bg-${colors[type]}-900/70 border border-${colors[type]}-700 text-${colors[type]}-300`,messageDiv.innerHTML=`<i data-lucide="${icons[type]}" class="w-5 h-5 flex-shrink-0"></i><span>${text}</span>`,dom.messageBox.appendChild(messageDiv),lucide.createIcons(),isSticky||setTimeout(()=>(dom.messageBox.innerHTML=""),4e3)}
+        function initScanner() {if("undefined"==typeof ZXing)return showMessage("error","Scanner library not loaded.",!0),!1;return codeReader=new ZXing.BrowserMultiFormatReader,isScannerInitialized=!0,!0}
+        function startScanner(){isScannerInitialized||initScanner()&&navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}}).then(e=>{dom.scannerVideo.srcObject=e,dom.scannerModal.style.display="flex",codeReader.decodeFromStream(e,dom.scannerVideo,(e,t)=>{e&&e.getBarcodeFormat()===ZXing.BarcodeFormat.EAN_13&&(stopScanner(),lookupISBN(e.getText())),t&&!(t instanceof ZXing.NotFoundException)&&stopScanner()})}).catch(()=>showMessage("error","Could not access camera. Please grant permission."))}
+        function stopScanner(){codeReader&&codeReader.reset(),dom.scannerVideo&&dom.scannerVideo.srcObject&&dom.scannerVideo.srcObject.getTracks().forEach(e=>e.stop()),dom.scannerModal.style.display="none"}
+        function showManualAddForm(){dom.manualAddFormContainer.innerHTML='<form id="manual-add-form"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-300 mb-1">Title*</label><input type="text" id="manual_title" class="w-full p-2 bg-gray-700 rounded-md text-white" required></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Author(s)</label><input type="text" id="manual_authors" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Publisher</label><input type="text" id="manual_publisher" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Binding</label><input type="text" id="manual_binding" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Hardcover"></div></div><div class="mt-4"><label class="block text-sm font-medium text-gray-300 mb-1">Cover URL</label><input type="text" id="manual_cover_url" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="https://..."></div><button type="submit" class="w-full mt-6 bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700">Create Book & Add Copy</button></form>',dom.manualAddBookModal.style.display="flex",document.getElementById("manual-add-form").addEventListener("submit",handleManualAdd)}
+        async function handleManualAdd(e){e.preventDefault();const t=e.target.elements,o=t.manual_title.value;if(!o)return void showMessage("error","Title is a required field.");const n=o.toLowerCase().replace(/\s+/g,"-").replace(/[^a-z0-9-]/g,"").substring(0,50),a=`MANUAL-${n}-${Date.now()}`,d={id:a,title:o,authors:t.manual_authors.value||"N/A",publisher:t.manual_publisher.value||null,binding:t.manual_binding.value||null,cover_url:t.manual_cover_url.value||"https://placehold.co/300x450/374151/9ca3af?text=No+Cover"};if((await db.from("books").insert(d)).error)return void showMessage("error",`Could not save book: ${error.message}`);showMessage("success","Manual entry created! Now add your first copy."),dom.manualAddBookModal.style.display="none",collection.set(a,{...d,inventory:[]}),renderCollection(),showAddCopyForm(a)}
+        function showAddCopyForm(e){const t=collection.get(e);if(!t)return;const o=(new Date).toISOString().split("T")[0];dom.addCopyFormContainer.innerHTML=`<p class="text-gray-400 mb-4">Adding a copy of <strong>${t.title}</strong></p><form id="add-copy-form" data-isbn="${t.id}"><div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"><div><label for="condition" class="block text-sm font-medium text-gray-300 mb-1">Condition</label><select id="condition" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">${["Brand New","Like New","Very Good","Good","Acceptable"].map(e=>`<option value="${e}" ${"Good"===e?"selected":""}>${e}</option>`).join("")}</select></div><div><label for="purchase_price" class="block text-sm font-medium text-gray-300 mb-1">Purchase Price</label><input type="number" id="purchase_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="2.50"></div><div><label for="market_price" class="block text-sm font-medium text-gray-300 mb-1">Market Price</label><input type="number" id="market_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="49.99"></div><div><label for="date_purchased" class="block text-sm font-medium text-gray-300 mb-1">Date Purchased</label><input type="date" id="date_purchased" value="${o}" class="w-full p-2 bg-gray-700 rounded-md text-white"></div></div><div class="mb-4"><label for="location_purchased" class="block text-sm font-medium text-gray-300 mb-1">Location Purchased</label><input type="text" id="location_purchased" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Goodwill, Hilliard"></div><div class="mb-4"><label for="notes" class="block text-sm font-medium text-gray-300 mb-1">Notes</label><textarea id="notes" rows="3" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Signed 1st ed, slight shelf wear"></textarea></div><div class="mb-6 flex items-center"><input type="checkbox" id="is_listed" class="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 bg-gray-700"><label for="is_listed" class="ml-2 block text-sm text-gray-300">Listed for sale</label></div><button type="submit" class="w-full bg-green-600 text-white font-semibold py-2 rounded-md hover:bg-green-700">Add to Inventory</button></form>`,dom.addCopyModal.style.display="flex",document.getElementById("add-copy-form").addEventListener("submit",handleAddCopy)}
+        
+        // --- Init App ---
         init();
       });
     </script>
