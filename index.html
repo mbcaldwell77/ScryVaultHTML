@@ -1,215 +1,735 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ScryVault - ISBN Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"
+    ></script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .modal {
-            display: none; position: fixed; z-index: 100; left: 0; top: 0;
-            width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.9);
-            justify-content: center; align-items: center; padding: 1rem;
-        }
-        #video-container {
-            position: relative; width: 80vw; max-width: 480px; border: 3px solid #10b981;
-            border-radius: 8px; overflow: hidden; background: #111827;
-        }
-        #scanner-video { width: 100%; height: auto; display: block; }
-        .modal-close-btn { position: absolute; top: 10px; right: 10px; z-index: 101; }
-        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); }
-        .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
-        .accordion-toggle .chevron-icon { transition: transform 0.3s ease-out; }
-        .accordion-toggle.open .chevron-icon { transform: rotate(180deg); }
+      body {
+        font-family: "Inter", sans-serif;
+      }
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 100;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.9);
+        justify-content: center;
+        align-items: center;
+        padding: 1rem;
+      }
+      #video-container {
+        position: relative;
+        width: 80vw;
+        max-width: 480px;
+        border: 3px solid #10b981;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #111827;
+      }
+      #scanner-video {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
+      .modal-close-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 101;
+      }
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: invert(0.8);
+      }
+      .accordion-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out;
+      }
+      .accordion-toggle .chevron-icon {
+        transition: transform 0.3s ease-out;
+      }
+      .accordion-toggle.open .chevron-icon {
+        transform: rotate(180deg);
+      }
     </style>
-</head>
-<body class="bg-gray-900 text-gray-300">
-
+  </head>
+  <body class="bg-gray-900 text-gray-300">
     <!-- Modals -->
-    <div id="scanner-modal" class="modal"><div id="video-container"><video id="scanner-video"></video><button id="close-scanner-btn" class="modal-close-btn p-2 bg-red-600/80 rounded-full text-white hover:bg-red-700"><i data-lucide="x"></i></button></div></div>
-    <div id="add-copy-modal" class="modal"><div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md relative"><button id="close-copy-modal-btn" class="modal-close-btn p-2 text-gray-400 hover:text-white"><i data-lucide="x"></i></button><h3 class="text-xl font-semibold text-white mb-4">Add New Copy</h3><div id="add-copy-form-container"></div></div></div>
-    <div id="manual-add-book-modal" class="modal"><div class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-lg relative"><button id="close-manual-add-modal-btn" class="modal-close-btn p-2 text-gray-400 hover:text-white"><i data-lucide="x"></i></button><h3 class="text-xl font-semibold text-white mb-4">Manual Book Entry</h3><div id="manual-add-form-container"></div></div></div>
+    <div id="scanner-modal" class="modal">
+      <div id="video-container">
+        <video id="scanner-video"></video
+        ><button
+          id="close-scanner-btn"
+          class="modal-close-btn p-2 bg-red-600/80 rounded-full text-white hover:bg-red-700"
+        >
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+    </div>
+    <div id="add-copy-modal" class="modal">
+      <div
+        class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md relative"
+      >
+        <button
+          id="close-copy-modal-btn"
+          class="modal-close-btn p-2 text-gray-400 hover:text-white"
+        >
+          <i data-lucide="x"></i>
+        </button>
+        <h3 class="text-xl font-semibold text-white mb-4">Add New Copy</h3>
+        <div id="add-copy-form-container"></div>
+      </div>
+    </div>
+    <div id="manual-add-book-modal" class="modal">
+      <div
+        class="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-lg relative"
+      >
+        <button
+          id="close-manual-add-modal-btn"
+          class="modal-close-btn p-2 text-gray-400 hover:text-white"
+        >
+          <i data-lucide="x"></i>
+        </button>
+        <h3 class="text-xl font-semibold text-white mb-4">Manual Book Entry</h3>
+        <div id="manual-add-form-container"></div>
+      </div>
+    </div>
 
     <div id="app" class="container mx-auto p-4 md:p-8 max-w-7xl">
-        <header class="text-center mb-8">
-            <h1 class="text-4xl md:text-5xl font-bold text-green-500">ScryVault</h1>
-            <p class="text-gray-400 mt-2">Inventory management for Ældern Tomes.</p>
-        </header>
+      <header class="text-center mb-8">
+        <h1 class="text-4xl md:text-5xl font-bold text-green-500">ScryVault</h1>
+        <p class="text-gray-400 mt-2">Inventory management for Ældern Tomes.</p>
+      </header>
 
-        <main>
-             <section id="scanner-section" class="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-                <h2 class="text-2xl font-semibold mb-4 text-white">Add New Book</h2>
-                <div class="flex flex-col sm:flex-row gap-4 flex-wrap">
-                    <input type="text" id="isbn-input" placeholder="Enter ISBN-13" class="flex-grow p-3 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-green-500 text-white">
-                    <button id="scan-btn" class="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 flex items-center justify-center gap-2"><i data-lucide="camera"></i><span>Scan ISBN</span></button>
-                    <button id="lookup-btn" class="bg-gray-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-gray-700 flex items-center justify-center gap-2"><i data-lucide="search"></i><span>Lookup</span></button>
-                    <button id="manual-add-btn" class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-blue-700 flex items-center justify-center gap-2"><i data-lucide="edit-3"></i><span>Manual Entry</span></button>
-                </div>
-                 <div id="message-box" class="mt-4"></div>
-            </section>
+      <main>
+        <section
+          id="scanner-section"
+          class="bg-gray-800 p-6 rounded-lg shadow-md mb-8"
+        >
+          <h2 class="text-2xl font-semibold mb-4 text-white">Add New Book</h2>
+          <div class="flex flex-col sm:flex-row gap-4 flex-wrap">
+            <input
+              type="text"
+              id="isbn-input"
+              placeholder="Enter ISBN-13"
+              class="flex-grow p-3 bg-gray-700 border border-gray-600 rounded-md focus:ring-2 focus:ring-green-500 text-white"
+            />
+            <button
+              id="scan-btn"
+              class="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 flex items-center justify-center gap-2"
+            >
+              <i data-lucide="camera"></i><span>Scan ISBN</span>
+            </button>
+            <button
+              id="lookup-btn"
+              class="bg-gray-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-gray-700 flex items-center justify-center gap-2"
+            >
+              <i data-lucide="search"></i><span>Lookup</span>
+            </button>
+            <button
+              id="manual-add-btn"
+              class="bg-blue-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-blue-700 flex items-center justify-center gap-2"
+            >
+              <i data-lucide="edit-3"></i><span>Manual Entry</span>
+            </button>
+          </div>
+          <div id="message-box" class="mt-4"></div>
+        </section>
 
-            <section id="collection-section" class="bg-gray-800 p-6 rounded-lg shadow-md">
-                <h2 class="text-2xl font-semibold mb-4 text-white">My Collection</h2>
-                <div id="collection-grid" class="space-y-4">
-                     <div id="loading-spinner" class="col-span-full flex justify-center items-center p-8"><i data-lucide="loader-2" class="animate-spin h-10 w-10 text-green-500"></i></div>
-                </div>
-                 <p id="no-collection-msg" class="hidden text-center text-gray-500 py-8">Your collection is empty. Use the form above to add your first book.</p>
-            </section>
-        </main>
+        <section
+          id="collection-section"
+          class="bg-gray-800 p-6 rounded-lg shadow-md"
+        >
+          <h2 class="text-2xl font-semibold mb-4 text-white">My Collection</h2>
+          <div id="collection-grid" class="space-y-4">
+            <div
+              id="loading-spinner"
+              class="col-span-full flex justify-center items-center p-8"
+            >
+              <i
+                data-lucide="loader-2"
+                class="animate-spin h-10 w-10 text-green-500"
+              ></i>
+            </div>
+          </div>
+          <p
+            id="no-collection-msg"
+            class="hidden text-center text-gray-500 py-8"
+          >
+            Your collection is empty. Use the form above to add your first book.
+          </p>
+        </section>
+      </main>
     </div>
 
     <script>
-    document.addEventListener('DOMContentLoaded', () => {
+      document.addEventListener("DOMContentLoaded", () => {
         const dom = [
-            'isbn-input', 'lookup-btn', 'scan-btn', 'collection-grid', 'no-collection-msg', 'message-box', 'loading-spinner', 
-            'scanner-modal', 'scanner-video', 'close-scanner-btn', 'add-copy-modal', 'close-copy-modal-btn', 'add-copy-form-container',
-            'manual-add-btn', 'manual-add-book-modal', 'close-manual-add-modal-btn', 'manual-add-form-container'
-        ].reduce((acc, id) => ({ ...acc, [id.replace(/-(\w)/g, (_, g) => g.toUpperCase())]: document.getElementById(id) }), {});
+          "isbn-input",
+          "lookup-btn",
+          "scan-btn",
+          "collection-grid",
+          "no-collection-msg",
+          "message-box",
+          "loading-spinner",
+          "scanner-modal",
+          "scanner-video",
+          "close-scanner-btn",
+          "add-copy-modal",
+          "close-copy-modal-btn",
+          "add-copy-form-container",
+          "manual-add-btn",
+          "manual-add-book-modal",
+          "close-manual-add-modal-btn",
+          "manual-add-form-container",
+        ].reduce(
+          (acc, id) => ({
+            ...acc,
+            [id.replace(/-(\w)/g, (_, g) => g.toUpperCase())]:
+              document.getElementById(id),
+          }),
+          {}
+        );
 
-        const SUPABASE_URL = 'https://zspprjeucjjilvaznysd.supabase.co'; 
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzcHByamV1Y2pqaWx2YXpueXNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA2MDQ3NjgsImV4cCI6MjA2NjE4MDc2OH0.l5x6ErWmb0eqU7Cqt6lEQXZWSSjOWRV8Ld3TlUXYxbk';
-        let db, codeReader, isScannerInitialized = false, collection = new Map();
+        const SUPABASE_URL = "https://zspprjeucjjilvaznysd.supabase.co";
+        const SUPABASE_ANON_KEY =
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzcHByamV1Y2pqaWx2YXpueXNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA2MDQ3NjgsImV4cCI6MjA2NjE4MDc2OH0.l5x6ErWmb0eqU7Cqt6lEQXZWSSjOWRV8Ld3TlUXYxbk";
+        let db,
+          codeReader,
+          isScannerInitialized = false,
+          collection = new Map();
 
         // --- Init & Event Delegation ---
-        function init() { /* ... unchanged ... */ }
-        
-        dom.lookupBtn.addEventListener('click', () => lookupISBN(dom.isbnInput.value));
-        dom.scanBtn.addEventListener('click', startScanner);
-        dom.manualAddBtn.addEventListener('click', showManualAddForm);
-        dom.closeScannerBtn.addEventListener('click', stopScanner);
-        dom.closeCopyModalBtn.addEventListener('click', () => dom.addCopyModal.style.display = 'none');
-        dom.closeManualAddModalBtn.addEventListener('click', () => dom.manualAddBookModal.style.display = 'none');
-        
-        dom.collectionGrid.addEventListener('click', (e) => {
-            const toggleButton = e.target.closest('.accordion-toggle');
-            if (toggleButton) {
-                if (e.target.closest('button')) return; // Ignore clicks on buttons within the toggle
-                toggleAccordion(toggleButton);
-            }
+        function init() {
+          /* ... unchanged ... */
+        }
+
+        dom.lookupBtn.addEventListener("click", () =>
+          lookupISBN(dom.isbnInput.value)
+        );
+        dom.scanBtn.addEventListener("click", startScanner);
+        dom.manualAddBtn.addEventListener("click", showManualAddForm);
+        dom.closeScannerBtn.addEventListener("click", stopScanner);
+        dom.closeCopyModalBtn.addEventListener(
+          "click",
+          () => (dom.addCopyModal.style.display = "none")
+        );
+        dom.closeManualAddModalBtn.addEventListener(
+          "click",
+          () => (dom.manualAddBookModal.style.display = "none")
+        );
+
+        dom.collectionGrid.addEventListener("click", (e) => {
+          const toggleButton = e.target.closest(".accordion-toggle");
+          if (toggleButton) {
+            if (e.target.closest("button")) return; // Ignore clicks on buttons within the toggle
+            toggleAccordion(toggleButton);
+          }
         });
 
         function toggleAccordion(toggleButton) {
-            toggleButton.classList.toggle('open');
-            const content = toggleButton.nextElementSibling;
-            if (content.style.maxHeight) content.style.maxHeight = null;
-            else content.style.maxHeight = content.scrollHeight + "px";
+          toggleButton.classList.toggle("open");
+          const content = toggleButton.nextElementSibling;
+          if (content.style.maxHeight) content.style.maxHeight = null;
+          else content.style.maxHeight = content.scrollHeight + "px";
         }
 
         // --- Core Functions ---
         async function toggleListedStatus(copyId, currentStatus, buttonEl) {
-             if (!db) return;
-            const newStatus = !currentStatus;
-            
-            // Optimistic UI update
-            buttonEl.dataset.isListed = newStatus;
-            buttonEl.innerHTML = `<i data-lucide="${newStatus ? 'check-circle-2' : 'circle-dashed'}" class="w-4 h-4 mr-1"></i> ${newStatus ? 'Listed' : 'Unlisted'}`;
-            buttonEl.classList.toggle('bg-green-900', newStatus);
-            buttonEl.classList.toggle('text-green-300', newStatus);
-            buttonEl.classList.toggle('bg-gray-600', !newStatus);
-            buttonEl.classList.toggle('text-gray-300', !newStatus);
-            lucide.createIcons();
+          if (!db) return;
+          const newStatus = !currentStatus;
 
-            const { error } = await db.from('inventory').update({ is_listed: newStatus }).eq('copy_id', copyId);
-            
-            if (error) {
-                showMessage('error', `Failed to update status: ${error.message}`);
-                // Revert UI on error
-                buttonEl.dataset.isListed = currentStatus;
-                buttonEl.innerHTML = `<i data-lucide="${currentStatus ? 'check-circle-2' : 'circle-dashed'}" class="w-4 h-4 mr-1"></i> ${currentStatus ? 'Listed' : 'Unlisted'}`;
-                buttonEl.classList.toggle('bg-green-900', currentStatus);
-                buttonEl.classList.toggle('text-green-300', currentStatus);
-                buttonEl.classList.toggle('bg-gray-600', !currentStatus);
-                buttonEl.classList.toggle('text-gray-300', !currentStatus);
-                lucide.createIcons();
-            } else {
-                 for (const book of collection.values()) {
-                    const item = book.inventory.find(inv => inv.copy_id === copyId);
-                    if (item) { item.is_listed = newStatus; break; }
-                }
+          // Optimistic UI update
+          buttonEl.dataset.isListed = newStatus;
+          buttonEl.innerHTML = `<i data-lucide="${
+            newStatus ? "check-circle-2" : "circle-dashed"
+          }" class="w-4 h-4 mr-1"></i> ${newStatus ? "Listed" : "Unlisted"}`;
+          buttonEl.classList.toggle("bg-green-900", newStatus);
+          buttonEl.classList.toggle("text-green-300", newStatus);
+          buttonEl.classList.toggle("bg-gray-600", !newStatus);
+          buttonEl.classList.toggle("text-gray-300", !newStatus);
+          lucide.createIcons();
+
+          const { error } = await db
+            .from("inventory")
+            .update({ is_listed: newStatus })
+            .eq("copy_id", copyId);
+
+          if (error) {
+            showMessage("error", `Failed to update status: ${error.message}`);
+            // Revert UI on error
+            buttonEl.dataset.isListed = currentStatus;
+            buttonEl.innerHTML = `<i data-lucide="${
+              currentStatus ? "check-circle-2" : "circle-dashed"
+            }" class="w-4 h-4 mr-1"></i> ${
+              currentStatus ? "Listed" : "Unlisted"
+            }`;
+            buttonEl.classList.toggle("bg-green-900", currentStatus);
+            buttonEl.classList.toggle("text-green-300", currentStatus);
+            buttonEl.classList.toggle("bg-gray-600", !currentStatus);
+            buttonEl.classList.toggle("text-gray-300", !currentStatus);
+            lucide.createIcons();
+          } else {
+            for (const book of collection.values()) {
+              const item = book.inventory.find((inv) => inv.copy_id === copyId);
+              if (item) {
+                item.is_listed = newStatus;
+                break;
+              }
             }
+          }
         }
 
         async function lookupISBN(isbnValue) {
-            if (!isbnValue) return;
-            const cleanIsbn = isbnValue.trim().replace(/-/g, '');
-            const dbIsbn = `ISBN:${cleanIsbn}`;
+          if (!isbnValue) return;
+          const cleanIsbn = isbnValue.trim().replace(/-/g, "");
+          const dbIsbn = `ISBN:${cleanIsbn}`;
 
-            if (collection.has(dbIsbn)) {
-                showMessage('info', 'This book is already in your collection. Add another copy below.');
-                showAddCopyForm(dbIsbn);
-                return;
-            }
+          if (collection.has(dbIsbn)) {
+            showMessage(
+              "info",
+              "This book is already in your collection. Add another copy below."
+            );
+            showAddCopyForm(dbIsbn);
+            return;
+          }
 
-            showMessage('info', 'Looking up new book from Google Books...', true);
-            const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
-            if (!response.ok) { showMessage('error', 'Error connecting to Google Books.'); return; }
-            const data = await response.json();
-            
-            if (!data.items || data.items.length === 0) {
-                showMessage('error', 'Book not found on Google Books.');
-                return;
-            }
+          showMessage("info", "Looking up new book from Google Books...", true);
+          const response = await fetch(
+            `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`
+          );
+          if (!response.ok) {
+            showMessage("error", "Error connecting to Google Books.");
+            return;
+          }
+          const data = await response.json();
 
-            const bookData = data.items[0].volumeInfo;
-            // Get the highest resolution image available
-            const coverUrl = bookData.imageLinks?.thumbnail?.replace('&edge=curl', '').replace('http://', 'https://') || 'https://placehold.co/300x450/374151/9ca3af?text=No+Cover';
-            
-            const newBook = {
-                id: dbIsbn,
-                title: bookData.title || 'N/A',
-                authors: bookData.authors ? bookData.authors.join(', ') : 'N/A',
-                publisher: bookData.publisher || 'N/A',
-                // Google Books API doesn't have a reliable 'binding' field. We leave it blank for manual entry.
-                binding: '', 
-                cover_url: coverUrl
-            };
-            
-            const { error } = await db.from('books').upsert(newBook, { onConflict: 'id' });
-            if (error) {
-                showMessage('error', `Could not save book record: ${error.message}`);
-                return;
-            }
-            
-            showMessage('success', 'New book found! Add your first copy below.');
-            collection.set(newBook.id, { ...newBook, inventory: [] });
-            renderCollection();
-            showAddCopyForm(newBook.id);
+          if (!data.items || data.items.length === 0) {
+            showMessage("error", "Book not found on Google Books.");
+            return;
+          }
+
+          const bookData = data.items[0].volumeInfo;
+          // Get the highest resolution image available
+          const coverUrl =
+            bookData.imageLinks?.thumbnail
+              ?.replace("&edge=curl", "")
+              .replace("http://", "https://") ||
+            "https://placehold.co/300x450/374151/9ca3af?text=No+Cover";
+
+          const newBook = {
+            id: dbIsbn,
+            title: bookData.title || "N/A",
+            authors: bookData.authors ? bookData.authors.join(", ") : "N/A",
+            publisher: bookData.publisher || "N/A",
+            // Google Books API doesn't have a reliable 'binding' field. We leave it blank for manual entry.
+            binding: "",
+            cover_url: coverUrl,
+          };
+
+          const { error } = await db
+            .from("books")
+            .upsert(newBook, { onConflict: "id" });
+          if (error) {
+            showMessage(
+              "error",
+              `Could not save book record: ${error.message}`
+            );
+            return;
+          }
+
+          showMessage("success", "New book found! Add your first copy below.");
+          collection.set(newBook.id, { ...newBook, inventory: [] });
+          renderCollection();
+          showAddCopyForm(newBook.id);
         }
 
         // --- Other Functions ---
-        function showManualAddForm() { /* ... unchanged ... */ }
-        async function handleManualAdd(e) { /* ... unchanged ... */ }
-        function initScanner() { /* ... */ }
-        function startScanner() { /* ... */ }
-        function stopScanner() { /* ... */ }
-        async function fetchCollection() { /* ... */ }
-        function showAddCopyForm(bookIsbn) { /* ... unchanged ... */ }
-        async function handleAddCopy(e) { /* ... unchanged ... */ }
-        async function removeCopy(copyId) { /* ... unchanged ... */ }
-        function renderCollection() { /* ... unchanged ... */ }
-        function showMessage(type, text, isSticky = false) { /* ... */ }
+        function showManualAddForm() {
+          /* ... unchanged ... */
+        }
+        async function handleManualAdd(e) {
+          /* ... unchanged ... */
+        }
+        function initScanner() {
+          /* ... */
+        }
+        function startScanner() {
+          /* ... */
+        }
+        function stopScanner() {
+          /* ... */
+        }
+        async function fetchCollection() {
+          /* ... */
+        }
+        function showAddCopyForm(bookIsbn) {
+          /* ... unchanged ... */
+        }
+        async function handleAddCopy(e) {
+          /* ... unchanged ... */
+        }
+        async function removeCopy(copyId) {
+          /* ... unchanged ... */
+        }
+        function renderCollection() {
+          /* ... unchanged ... */
+        }
+        function showMessage(type, text, isSticky = false) {
+          /* ... */
+        }
 
         // --- Unchanged function definitions for brevity ---
         init();
-        function init(){lucide.createIcons();if(typeof supabase!=='undefined'&&SUPABASE_URL&&SUPABASE_ANON_KEY){db=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);fetchCollection();}else{showMessage('error','Database connection failed.',true);dom.loadingSpinner.style.display='none';}}
-        function initScanner(){if(typeof ZXing==='undefined'){showMessage('error','Scanner library not loaded.',true);return false;}codeReader=new ZXing.BrowserMultiFormatReader();isScannerInitialized=true;return true;}
-        function startScanner(){if(!isScannerInitialized&&!initScanner())return;navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}).then(stream=>{dom.scannerVideo.srcObject=stream;dom.scannerModal.style.display='flex';codeReader.decodeFromStream(stream,dom.scannerVideo,(result,err)=>{if(result&&result.getBarcodeFormat()===ZXing.BarcodeFormat.EAN_13){stopScanner();lookupISBN(result.getText());}if(err&&!(err instanceof ZXing.NotFoundException))stopScanner();});}).catch(()=>showMessage('error','Could not access camera. Please grant permission.'));}
-        function stopScanner(){if(codeReader)codeReader.reset();if(dom.scannerVideo&&dom.scannerVideo.srcObject){dom.scannerVideo.srcObject.getTracks().forEach(track=>track.stop());}dom.scannerModal.style.display='none';}
-        async function fetchCollection(){if(!db)return;dom.loadingSpinner.style.display='flex';const{data,error}=await db.from('books').select(`*, inventory (*)`).order('title');if(error){showMessage('error',`Could not load collection: ${error.message}`);}else{collection=new Map(data.map(book=>[book.id,book]));renderCollection();}dom.loadingSpinner.style.display='none';}
-        function showManualAddForm(){dom.manualAddFormContainer.innerHTML=`<form id="manual-add-form"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-300 mb-1">Title*</label><input type="text" id="manual_title" class="w-full p-2 bg-gray-700 rounded-md text-white" required></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Author(s)</label><input type="text" id="manual_authors" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Publisher</label><input type="text" id="manual_publisher" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Binding</label><input type="text" id="manual_binding" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Hardcover"></div></div><div class="mt-4"><label class="block text-sm font-medium text-gray-300 mb-1">Cover URL</label><input type="text" id="manual_cover_url" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="https://..."></div><button type="submit" class="w-full mt-6 bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700">Create Book & Add Copy</button></form>`;dom.manualAddBookModal.style.display='flex';document.getElementById('manual-add-form').addEventListener('submit',handleManualAdd);}
-        async function handleManualAdd(e){e.preventDefault();const form=e.target.elements;const title=form.manual_title.value;if(!title){showMessage('error','Title is a required field.');return;}const slug=title.toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'').substring(0,50);const uniqueId=`MANUAL-${slug}-${Date.now()}`;const newBook={id:uniqueId,title:title,authors:form.manual_authors.value||'N/A',publisher:form.manual_publisher.value||null,binding:form.manual_binding.value||null,cover_url:form.manual_cover_url.value||'https://placehold.co/300x450/374151/9ca3af?text=No+Cover'};const{error}=await db.from('books').insert(newBook);if(error){showMessage('error',`Could not save book: ${error.message}`);return;}showMessage('success','Manual entry created! Now add your first copy.');dom.manualAddBookModal.style.display='none';collection.set(newBook.id,{...newBook,inventory:[]});renderCollection();showAddCopyForm(newBook.id);}
-        async function removeCopy(copyId){if(!db||!confirm('Are you sure you want to permanently remove this copy from your inventory?'))return;const{error}=await db.from('inventory').delete().eq('copy_id',copyId);if(error){showMessage('error','Failed to remove copy.');return;}await fetchCollection();showMessage('info','Copy removed from inventory.');}
-        function showAddCopyForm(bookIsbn){const book=collection.get(bookIsbn);if(!book)return;const today=new Date().toISOString().split('T')[0];const conditionOptions=['Brand New','Like New','Very Good','Good','Acceptable'];dom.addCopyFormContainer.innerHTML=`<p class="text-gray-400 mb-4">Adding a copy of <strong>${book.title}</strong></p><form id="add-copy-form" data-isbn="${book.id}"><div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"><div><label for="condition" class="block text-sm font-medium text-gray-300 mb-1">Condition</label><select id="condition" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">${conditionOptions.map(opt=>`<option value="${opt}" ${opt==='Good'?'selected':''}>${opt}</option>`).join('')}</select></div><div><label for="purchase_price" class="block text-sm font-medium text-gray-300 mb-1">Purchase Price</label><input type="number" id="purchase_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="2.50"></div><div><label for="market_price" class="block text-sm font-medium text-gray-300 mb-1">Market Price</label><input type="number" id="market_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="49.99"></div><div><label for="date_purchased" class="block text-sm font-medium text-gray-300 mb-1">Date Purchased</label><input type="date" id="date_purchased" value="${today}" class="w-full p-2 bg-gray-700 rounded-md text-white"></div></div><div class="mb-4"><label for="location_purchased" class="block text-sm font-medium text-gray-300 mb-1">Location Purchased</label><input type="text" id="location_purchased" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Goodwill, Hilliard"></div><div class="mb-4"><label for="notes" class="block text-sm font-medium text-gray-300 mb-1">Notes</label><textarea id="notes" rows="3" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Signed 1st ed, slight shelf wear"></textarea></div><div class="mb-6 flex items-center"><input type="checkbox" id="is_listed" class="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 bg-gray-700"><label for="is_listed" class="ml-2 block text-sm text-gray-300">Listed for sale</label></div><button type="submit" class="w-full bg-green-600 text-white font-semibold py-2 rounded-md hover:bg-green-700">Add to Inventory</button></form>`;dom.addCopyModal.style.display='flex';document.getElementById('add-copy-form').addEventListener('submit',handleAddCopy);}
-        async function handleAddCopy(e){e.preventDefault();const form=e.target;const bookIsbn=form.dataset.isbn;const newCopy={book_isbn:bookIsbn,condition:form.elements.condition.value||null,purchase_price:form.elements.purchase_price.value?parseFloat(form.elements.purchase_price.value):null,market_price:form.elements.market_price.value?parseFloat(form.elements.market_price.value):null,date_purchased:form.elements.date_purchased.value||null,location_purchased:form.elements.location_purchased.value||null,notes:form.elements.notes.value||null,is_listed:form.elements.is_listed.checked};const{error}=await db.from('inventory').insert([newCopy]);if(error){showMessage('error',`Could not add copy: ${error.message}`);return;}showMessage('success','New copy added to inventory!');dom.addCopyModal.style.display='none';await fetchCollection();}
-        function renderCollection(){const openAccordions=new Set();document.querySelectorAll('.accordion-toggle.open').forEach(el=>{openAccordions.add(el.dataset.bookId);});dom.collectionGrid.innerHTML='';if(collection.size===0){dom.noCollectionMsg.style.display='block';return;}dom.noCollectionMsg.style.display='none';const sortedCollection=[...collection.values()].sort((a,b)=>a.title.localeCompare(b.title));for(const book of sortedCollection){const bookEntryDiv=document.createElement('div');bookEntryDiv.className='bg-gray-700/80 rounded-lg shadow-lg overflow-hidden';const hasInventory=book.inventory&&book.inventory.length>0;let copiesHtml='<div class="accordion-content p-4 pt-0"><div class="space-y-3">';if(hasInventory){const sortedInventory=book.inventory.sort((a,b)=>new Date(b.date_purchased)-new Date(a.date_purchased));copiesHtml+=sortedInventory.map(copy=>{const listedStatusBtn=`<button class="toggle-listed-btn flex items-center rounded-full py-1 px-2 text-xs ${copy.is_listed?'bg-green-900 text-green-300':'bg-gray-600 text-gray-300'} hover:opacity-80 transition-colors" data-copy-id="${copy.copy_id}" data-is-listed="${copy.is_listed}"><i data-lucide="${copy.is_listed?'check-circle-2':'circle-dashed'}" class="w-4 h-4 mr-1"></i> ${copy.is_listed?'Listed':'Unlisted'}</button>`;return`<div class="p-3 bg-gray-800/60 rounded-md text-sm"><div class="flex justify-between items-start gap-2"><div><p><strong>Condition:</strong> ${copy.condition||'N/A'}</p><p><strong>Cost:</strong> $${(copy.purchase_price||0).toFixed(2)} | <strong>Market:</strong> $${(copy.market_price||0).toFixed(2)}</p><p class="text-xs text-gray-400 mt-1">${copy.date_purchased||''} @ ${copy.location_purchased||'N/A'}</p>${copy.notes?`<p class="mt-2 text-xs text-gray-300 italic">“${copy.notes}”</p>`:''}</div><div class="text-right flex-shrink-0 space-y-2 flex flex-col items-end">${listedStatusBtn}<button class="remove-copy-btn p-1 text-red-400 hover:text-red-300" data-copy-id="${copy.copy_id}"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`;}).join('');}else{copiesHtml+=`<p class="text-xs text-center text-gray-500 py-2">No copies in inventory. <button class="add-first-copy-btn text-green-400 underline" data-isbn="${book.id}">Add first copy.</button></p>`}copiesHtml+='</div></div>';bookEntryDiv.innerHTML=`<div class="accordion-toggle p-4 flex gap-4 cursor-pointer hover:bg-gray-700" data-book-id="${book.id}"><img src="${book.cover_url}" alt="Cover for ${book.title}" class="w-24 h-36 object-cover rounded-md bg-gray-800 flex-shrink-0"><div class="flex-grow space-y-1"><h4 class="font-bold text-lg text-gray-100">${book.title}</h4><p class="font-mono text-base text-green-400">${book.id.replace(/^(ISBN:|MANUAL-)/,'')}</p><p class="text-sm text-gray-300">${book.publisher||'N/A'} - ${book.binding||'N/A'}</p><p class="text-sm text-gray-400 pt-2">${book.authors||'N/A'}</p></div><div class="flex flex-col items-center justify-center flex-shrink-0 px-2 text-center"><span class="text-2xl font-bold">${book.inventory?book.inventory.length:0}</span><span class="text-xs text-gray-400 uppercase tracking-wider">Copies</span>${hasInventory?'<i data-lucide="chevron-down" class="chevron-icon mt-2 text-gray-400"></i>':''}</div></div>${copiesHtml}`;dom.collectionGrid.appendChild(bookEntryDiv);}document.querySelectorAll('.toggle-listed-btn').forEach(btn=>btn.addEventListener('click',e=>{toggleListedStatus(e.currentTarget.dataset.copyId,e.currentTarget.dataset.isListed==='true',e.currentTarget);}));document.querySelectorAll('.remove-copy-btn').forEach(btn=>btn.addEventListener('click',e=>{removeCopy(e.currentTarget.dataset.copyId);}));document.querySelectorAll('.add-first-copy-btn').forEach(btn=>btn.addEventListener('click',e=>{showAddCopyForm(e.currentTarget.dataset.isbn);}));document.querySelectorAll('.accordion-toggle').forEach(toggle=>{if(openAccordions.has(toggle.dataset.bookId)){toggle.classList.add('open');const content=toggle.nextElementSibling;content.style.maxHeight=content.scrollHeight+"px";}});lucide.createIcons();}
-        function showMessage(type,text,isSticky=false){dom.messageBox.innerHTML='';const icons={success:'check-circle',warning:'alert-triangle',error:'x-circle',info:'info'};const colors={success:'green',warning:'yellow',error:'red',info:'blue'};const messageDiv=document.createElement('div');messageDiv.className=`p-4 rounded-md flex items-center gap-3 bg-${colors[type]}-900/70 border border-${colors[type]}-700 text-${colors[type]}-300`;messageDiv.innerHTML=`<i data-lucide="${icons[type]}" class="w-5 h-5 flex-shrink-0"></i><span>${text}</span>`;dom.messageBox.appendChild(messageDiv);lucide.createIcons();if(!isSticky)setTimeout(()=>dom.messageBox.innerHTML='',4000);}
-
-    });
+        function init() {
+          lucide.createIcons();
+          if (
+            typeof supabase !== "undefined" &&
+            SUPABASE_URL &&
+            SUPABASE_ANON_KEY
+          ) {
+            db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            fetchCollection();
+          } else {
+            showMessage("error", "Database connection failed.", true);
+            dom.loadingSpinner.style.display = "none";
+          }
+        }
+        function initScanner() {
+          if (typeof ZXing === "undefined") {
+            showMessage("error", "Scanner library not loaded.", true);
+            return false;
+          }
+          codeReader = new ZXing.BrowserMultiFormatReader();
+          isScannerInitialized = true;
+          return true;
+        }
+        function startScanner() {
+          if (!isScannerInitialized && !initScanner()) return;
+          navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: "environment" } })
+            .then((stream) => {
+              dom.scannerVideo.srcObject = stream;
+              dom.scannerModal.style.display = "flex";
+              codeReader.decodeFromStream(
+                stream,
+                dom.scannerVideo,
+                (result, err) => {
+                  if (
+                    result &&
+                    result.getBarcodeFormat() === ZXing.BarcodeFormat.EAN_13
+                  ) {
+                    stopScanner();
+                    lookupISBN(result.getText());
+                  }
+                  if (err && !(err instanceof ZXing.NotFoundException))
+                    stopScanner();
+                }
+              );
+            })
+            .catch(() =>
+              showMessage(
+                "error",
+                "Could not access camera. Please grant permission."
+              )
+            );
+        }
+        function stopScanner() {
+          if (codeReader) codeReader.reset();
+          if (dom.scannerVideo && dom.scannerVideo.srcObject) {
+            dom.scannerVideo.srcObject
+              .getTracks()
+              .forEach((track) => track.stop());
+          }
+          dom.scannerModal.style.display = "none";
+        }
+        async function fetchCollection() {
+          if (!db) return;
+          dom.loadingSpinner.style.display = "flex";
+          const { data, error } = await db
+            .from("books")
+            .select(`*, inventory (*)`)
+            .order("title");
+          if (error) {
+            showMessage("error", `Could not load collection: ${error.message}`);
+          } else {
+            collection = new Map(data.map((book) => [book.id, book]));
+            renderCollection();
+          }
+          dom.loadingSpinner.style.display = "none";
+        }
+        function showManualAddForm() {
+          dom.manualAddFormContainer.innerHTML = `<form id="manual-add-form"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-300 mb-1">Title*</label><input type="text" id="manual_title" class="w-full p-2 bg-gray-700 rounded-md text-white" required></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Author(s)</label><input type="text" id="manual_authors" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Publisher</label><input type="text" id="manual_publisher" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Binding</label><input type="text" id="manual_binding" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Hardcover"></div></div><div class="mt-4"><label class="block text-sm font-medium text-gray-300 mb-1">Cover URL</label><input type="text" id="manual_cover_url" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="https://..."></div><button type="submit" class="w-full mt-6 bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700">Create Book & Add Copy</button></form>`;
+          dom.manualAddBookModal.style.display = "flex";
+          document
+            .getElementById("manual-add-form")
+            .addEventListener("submit", handleManualAdd);
+        }
+        async function handleManualAdd(e) {
+          e.preventDefault();
+          const form = e.target.elements;
+          const title = form.manual_title.value;
+          if (!title) {
+            showMessage("error", "Title is a required field.");
+            return;
+          }
+          const slug = title
+            .toLowerCase()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9-]/g, "")
+            .substring(0, 50);
+          const uniqueId = `MANUAL-${slug}-${Date.now()}`;
+          const newBook = {
+            id: uniqueId,
+            title: title,
+            authors: form.manual_authors.value || "N/A",
+            publisher: form.manual_publisher.value || null,
+            binding: form.manual_binding.value || null,
+            cover_url:
+              form.manual_cover_url.value ||
+              "https://placehold.co/300x450/374151/9ca3af?text=No+Cover",
+          };
+          const { error } = await db.from("books").insert(newBook);
+          if (error) {
+            showMessage("error", `Could not save book: ${error.message}`);
+            return;
+          }
+          showMessage(
+            "success",
+            "Manual entry created! Now add your first copy."
+          );
+          dom.manualAddBookModal.style.display = "none";
+          collection.set(newBook.id, { ...newBook, inventory: [] });
+          renderCollection();
+          showAddCopyForm(newBook.id);
+        }
+        async function removeCopy(copyId) {
+          if (
+            !db ||
+            !confirm(
+              "Are you sure you want to permanently remove this copy from your inventory?"
+            )
+          )
+            return;
+          const { error } = await db
+            .from("inventory")
+            .delete()
+            .eq("copy_id", copyId);
+          if (error) {
+            showMessage("error", "Failed to remove copy.");
+            return;
+          }
+          await fetchCollection();
+          showMessage("info", "Copy removed from inventory.");
+        }
+        function showAddCopyForm(bookIsbn) {
+          const book = collection.get(bookIsbn);
+          if (!book) return;
+          const today = new Date().toISOString().split("T")[0];
+          const conditionOptions = [
+            "Brand New",
+            "Like New",
+            "Very Good",
+            "Good",
+            "Acceptable",
+          ];
+          dom.addCopyFormContainer.innerHTML = `<p class="text-gray-400 mb-4">Adding a copy of <strong>${
+            book.title
+          }</strong></p><form id="add-copy-form" data-isbn="${
+            book.id
+          }"><div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4"><div><label for="condition" class="block text-sm font-medium text-gray-300 mb-1">Condition</label><select id="condition" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white">${conditionOptions
+            .map(
+              (opt) =>
+                `<option value="${opt}" ${
+                  opt === "Good" ? "selected" : ""
+                }>${opt}</option>`
+            )
+            .join(
+              ""
+            )}</select></div><div><label for="purchase_price" class="block text-sm font-medium text-gray-300 mb-1">Purchase Price</label><input type="number" id="purchase_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="2.50"></div><div><label for="market_price" class="block text-sm font-medium text-gray-300 mb-1">Market Price</label><input type="number" id="market_price" step="0.01" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="49.99"></div><div><label for="date_purchased" class="block text-sm font-medium text-gray-300 mb-1">Date Purchased</label><input type="date" id="date_purchased" value="${today}" class="w-full p-2 bg-gray-700 rounded-md text-white"></div></div><div class="mb-4"><label for="location_purchased" class="block text-sm font-medium text-gray-300 mb-1">Location Purchased</label><input type="text" id="location_purchased" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Goodwill, Hilliard"></div><div class="mb-4"><label for="notes" class="block text-sm font-medium text-gray-300 mb-1">Notes</label><textarea id="notes" rows="3" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Signed 1st ed, slight shelf wear"></textarea></div><div class="mb-6 flex items-center"><input type="checkbox" id="is_listed" class="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 bg-gray-700"><label for="is_listed" class="ml-2 block text-sm text-gray-300">Listed for sale</label></div><button type="submit" class="w-full bg-green-600 text-white font-semibold py-2 rounded-md hover:bg-green-700">Add to Inventory</button></form>`;
+          dom.addCopyModal.style.display = "flex";
+          document
+            .getElementById("add-copy-form")
+            .addEventListener("submit", handleAddCopy);
+        }
+        async function handleAddCopy(e) {
+          e.preventDefault();
+          const form = e.target;
+          const bookIsbn = form.dataset.isbn;
+          const newCopy = {
+            book_isbn: bookIsbn,
+            condition: form.elements.condition.value || null,
+            purchase_price: form.elements.purchase_price.value
+              ? parseFloat(form.elements.purchase_price.value)
+              : null,
+            market_price: form.elements.market_price.value
+              ? parseFloat(form.elements.market_price.value)
+              : null,
+            date_purchased: form.elements.date_purchased.value || null,
+            location_purchased: form.elements.location_purchased.value || null,
+            notes: form.elements.notes.value || null,
+            is_listed: form.elements.is_listed.checked,
+          };
+          const { error } = await db.from("inventory").insert([newCopy]);
+          if (error) {
+            showMessage("error", `Could not add copy: ${error.message}`);
+            return;
+          }
+          showMessage("success", "New copy added to inventory!");
+          dom.addCopyModal.style.display = "none";
+          await fetchCollection();
+        }
+        function renderCollection() {
+          const openAccordions = new Set();
+          document.querySelectorAll(".accordion-toggle.open").forEach((el) => {
+            openAccordions.add(el.dataset.bookId);
+          });
+          dom.collectionGrid.innerHTML = "";
+          if (collection.size === 0) {
+            dom.noCollectionMsg.style.display = "block";
+            return;
+          }
+          dom.noCollectionMsg.style.display = "none";
+          const sortedCollection = [...collection.values()].sort((a, b) =>
+            a.title.localeCompare(b.title)
+          );
+          for (const book of sortedCollection) {
+            const bookEntryDiv = document.createElement("div");
+            bookEntryDiv.className =
+              "bg-gray-700/80 rounded-lg shadow-lg overflow-hidden";
+            const hasInventory = book.inventory && book.inventory.length > 0;
+            let copiesHtml =
+              '<div class="accordion-content p-4 pt-0"><div class="space-y-3">';
+            if (hasInventory) {
+              const sortedInventory = book.inventory.sort(
+                (a, b) =>
+                  new Date(b.date_purchased) - new Date(a.date_purchased)
+              );
+              copiesHtml += sortedInventory
+                .map((copy) => {
+                  const listedStatusBtn = `<button class="toggle-listed-btn flex items-center rounded-full py-1 px-2 text-xs ${
+                    copy.is_listed
+                      ? "bg-green-900 text-green-300"
+                      : "bg-gray-600 text-gray-300"
+                  } hover:opacity-80 transition-colors" data-copy-id="${
+                    copy.copy_id
+                  }" data-is-listed="${copy.is_listed}"><i data-lucide="${
+                    copy.is_listed ? "check-circle-2" : "circle-dashed"
+                  }" class="w-4 h-4 mr-1"></i> ${
+                    copy.is_listed ? "Listed" : "Unlisted"
+                  }</button>`;
+                  return `<div class="p-3 bg-gray-800/60 rounded-md text-sm"><div class="flex justify-between items-start gap-2"><div><p><strong>Condition:</strong> ${
+                    copy.condition || "N/A"
+                  }</p><p><strong>Cost:</strong> $${(
+                    copy.purchase_price || 0
+                  ).toFixed(2)} | <strong>Market:</strong> $${(
+                    copy.market_price || 0
+                  ).toFixed(2)}</p><p class="text-xs text-gray-400 mt-1">${
+                    copy.date_purchased || ""
+                  } @ ${copy.location_purchased || "N/A"}</p>${
+                    copy.notes
+                      ? `<p class="mt-2 text-xs text-gray-300 italic">“${copy.notes}”</p>`
+                      : ""
+                  }</div><div class="text-right flex-shrink-0 space-y-2 flex flex-col items-end">${listedStatusBtn}<button class="remove-copy-btn p-1 text-red-400 hover:text-red-300" data-copy-id="${
+                    copy.copy_id
+                  }"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`;
+                })
+                .join("");
+            } else {
+              copiesHtml += `<p class="text-xs text-center text-gray-500 py-2">No copies in inventory. <button class="add-first-copy-btn text-green-400 underline" data-isbn="${book.id}">Add first copy.</button></p>`;
+            }
+            copiesHtml += "</div></div>";
+            bookEntryDiv.innerHTML = `<div class="accordion-toggle p-4 flex gap-4 cursor-pointer hover:bg-gray-700" data-book-id="${
+              book.id
+            }"><img src="${book.cover_url}" alt="Cover for ${
+              book.title
+            }" class="w-24 h-36 object-cover rounded-md bg-gray-800 flex-shrink-0"><div class="flex-grow space-y-1"><h4 class="font-bold text-lg text-gray-100">${
+              book.title
+            }</h4><p class="font-mono text-base text-green-400">${book.id.replace(
+              /^(ISBN:|MANUAL-)/,
+              ""
+            )}</p><p class="text-sm text-gray-300">${
+              book.publisher || "N/A"
+            } - ${
+              book.binding || "N/A"
+            }</p><p class="text-sm text-gray-400 pt-2">${
+              book.authors || "N/A"
+            }</p></div><div class="flex flex-col items-center justify-center flex-shrink-0 px-2 text-center"><span class="text-2xl font-bold">${
+              book.inventory ? book.inventory.length : 0
+            }</span><span class="text-xs text-gray-400 uppercase tracking-wider">Copies</span>${
+              hasInventory
+                ? '<i data-lucide="chevron-down" class="chevron-icon mt-2 text-gray-400"></i>'
+                : ""
+            }</div></div>${copiesHtml}`;
+            dom.collectionGrid.appendChild(bookEntryDiv);
+          }
+          document.querySelectorAll(".toggle-listed-btn").forEach((btn) =>
+            btn.addEventListener("click", (e) => {
+              toggleListedStatus(
+                e.currentTarget.dataset.copyId,
+                e.currentTarget.dataset.isListed === "true",
+                e.currentTarget
+              );
+            })
+          );
+          document.querySelectorAll(".remove-copy-btn").forEach((btn) =>
+            btn.addEventListener("click", (e) => {
+              removeCopy(e.currentTarget.dataset.copyId);
+            })
+          );
+          document.querySelectorAll(".add-first-copy-btn").forEach((btn) =>
+            btn.addEventListener("click", (e) => {
+              showAddCopyForm(e.currentTarget.dataset.isbn);
+            })
+          );
+          document.querySelectorAll(".accordion-toggle").forEach((toggle) => {
+            if (openAccordions.has(toggle.dataset.bookId)) {
+              toggle.classList.add("open");
+              const content = toggle.nextElementSibling;
+              content.style.maxHeight = content.scrollHeight + "px";
+            }
+          });
+          lucide.createIcons();
+        }
+        function showMessage(type, text, isSticky = false) {
+          dom.messageBox.innerHTML = "";
+          const icons = {
+            success: "check-circle",
+            warning: "alert-triangle",
+            error: "x-circle",
+            info: "info",
+          };
+          const colors = {
+            success: "green",
+            warning: "yellow",
+            error: "red",
+            info: "blue",
+          };
+          const messageDiv = document.createElement("div");
+          messageDiv.className = `p-4 rounded-md flex items-center gap-3 bg-${colors[type]}-900/70 border border-${colors[type]}-700 text-${colors[type]}-300`;
+          messageDiv.innerHTML = `<i data-lucide="${icons[type]}" class="w-5 h-5 flex-shrink-0"></i><span>${text}</span>`;
+          dom.messageBox.appendChild(messageDiv);
+          lucide.createIcons();
+          if (!isSticky)
+            setTimeout(() => (dom.messageBox.innerHTML = ""), 4000);
+        }
+      });
     </script>
-</body>
+  </body>
 </html>
