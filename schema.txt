@@ -1,48 +1,65 @@
--- Create the table to store your book collection
+-- This script sets up the database schema for ScryVault and adds dummy data.
+-- It's safe to run this multiple times; it will drop old tables first.
+
+-- Step 1: Drop existing tables to ensure a clean slate
+DROP TABLE IF EXISTS inventory;
+DROP TABLE IF EXISTS books;
+
+-- Step 2: Create the 'books' table for core, unchanging metadata
 CREATE TABLE books (
-  id TEXT PRIMARY KEY, -- Using the ISBN or OpenLibrary ID as the primary key
+  id TEXT PRIMARY KEY, -- The ISBN, e.g., "ISBN:9780553074122"
   title TEXT NOT NULL,
   authors TEXT,
-  publish_date TEXT,
-  cover_url TEXT,
-  market_price REAL, -- Using REAL for floating point numbers
-  date_added TIMESTAMPTZ DEFAULT NOW() NOT NULL
+  publisher TEXT,
+  binding TEXT, -- The format, e.g., "Hardcover", "Paperback"
+  cover_url TEXT
 );
 
--- Enable Row Level Security (RLS) on the new table
--- This is a crucial security step.
-ALTER TABLE books ENABLE ROW LEVEL SECURITY;
-
--- Create a policy that allows users to see and manage their own books.
--- This policy allows any user (including the 'anon' public user) to perform all actions.
--- This is suitable for a personal, single-user application.
-CREATE POLICY "Public user can manage all books"
-  ON books
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
-
--- Create the new table for individual inventory copies
+-- Step 3: Create the 'inventory' table for each unique copy you own
 CREATE TABLE inventory (
-  copy_id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- A unique ID for each specific copy
-  book_isbn TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE, -- Links to the books table
-  condition TEXT,
+  copy_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  book_isbn TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
   purchase_price REAL,
-  notes TEXT,
-  date_added TIMESTAMPTZ DEFAULT NOW() NOT NULL
+  market_price REAL,
+  condition TEXT, -- e.g., "Near Mint", "Good", "Acceptable"
+  notes TEXT, -- e.g., "Signed 1st edition, slight shelf wear"
+  date_purchased DATE,
+  location_purchased TEXT
 );
 
--- Enable Row Level Security (RLS) on the new table
+-- Step 4: Enable Row Level Security (RLS) on both tables
+ALTER TABLE books ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
 
--- Create a policy that allows public users to manage all inventory items
-CREATE POLICY "Public user can manage all inventory"
-  ON inventory
-  FOR ALL
-  USING (true)
-  WITH CHECK (true);
+-- Step 5: Create policies that allow public access
+CREATE POLICY "Public user can manage all books" ON books FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public user can manage all inventory" ON inventory FOR ALL USING (true) WITH CHECK (true);
 
--- Optional: If you want to remove the price and date from the original 'books' table 
--- as it's now handled by the 'inventory' table, you can run these lines too.
--- ALTER TABLE books DROP COLUMN IF EXISTS market_price;
--- ALTER TABLE books DROP COLUMN IF EXISTS date_added;
+-- Step 6: Insert dummy data for testing
+-- Book Master Records
+INSERT INTO books (id, title, authors, publisher, binding, cover_url) VALUES
+('ISBN:9780553074122', 'Heir to the Empire', 'Timothy Zahn', 'Bantam Spectra', 'Hardcover', 'https://covers.openlibrary.org/b/id/10074218-L.jpg'),
+('ISBN:9780441013593', 'Dune', 'Frank Herbert', 'Ace Books', 'Paperback', 'https://covers.openlibrary.org/b/id/12714212-L.jpg'),
+('ISBN:9780441569595', 'Neuromancer', 'William Gibson', 'Ace', 'Paperback', 'https://covers.openlibrary.org/b/id/10488422-L.jpg'),
+('ISBN:9780786965608', 'Player''s Handbook (Dungeons & Dragons, 5th Edition)', 'Wizards RPG Team', 'Wizards of the Coast', 'Hardcover', 'https://covers.openlibrary.org/b/id/8372191-L.jpg'),
+('ISBN:9780812511819', 'The Eye of the World', 'Robert Jordan', 'Tor Books', 'Paperback', 'https://covers.openlibrary.org/b/id/10048472-L.jpg'),
+('ISBN:9780553103540', 'A Game of Thrones', 'George R. R. Martin', 'Bantam', 'Hardcover', 'https://covers.openlibrary.org/b/id/10587989-L.jpg');
+
+-- Inventory Copy Records
+INSERT INTO inventory (book_isbn, purchase_price, market_price, condition, notes, date_purchased, location_purchased) VALUES
+-- Two copies of Heir to the Empire
+('ISBN:9780553074122', 4.50, 49.99, 'Very Good', 'First Edition, First Printing. Slight shelf wear to dust jacket.', '2024-05-10', 'Goodwill, Hilliard'),
+('ISBN:9780553074122', 1.00, 15.00, 'Good', 'Book club edition (SFBC). No remainder mark.', '2024-06-01', 'Thrift-lot pickup'),
+-- One copy of Dune
+('ISBN:9780441013593', 0.50, 8.99, 'Acceptable', 'Cover crease, reading copy.', '2024-04-22', 'Half Price Books, Dublin'),
+-- One copy of Neuromancer
+('ISBN:9780441569595', 2.00, 12.50, 'Good', NULL, '2024-05-30', 'The Book Loft'),
+-- Two copies of the Player's Handbook
+('ISBN:9780786965608', 15.00, 35.00, 'Near Mint', 'Appears unread.', '2024-06-15', 'Guardtower West'),
+('ISBN:9780786965608', 5.00, 20.00, 'Good', 'Some spine wear.', '2024-06-15', 'Guardtower West'),
+-- One copy of Eye of the World
+('ISBN:9780812511819', 1.00, 7.50, 'Good', NULL, '2024-03-19', 'Goodwill, Columbus'),
+-- One copy of Game of Thrones
+('ISBN:9780553103540', 10.00, 150.00, 'Very Good+', 'First edition, later printing. Clean copy.', '2024-06-02', 'Private Collector Sale');
+
+-- End of script
