@@ -70,7 +70,6 @@
     </style>
   </head>
   <body class="bg-gray-900 text-gray-300">
-    <!-- Modals -->
     <div id="scanner-modal" class="modal">
       <div id="video-container">
         <video id="scanner-video"></video
@@ -217,7 +216,18 @@
 
         // --- Init & Event Delegation ---
         function init() {
-          /* ... unchanged ... */
+          lucide.createIcons();
+          if (
+            typeof supabase !== "undefined" &&
+            SUPABASE_URL &&
+            SUPABASE_ANON_KEY
+          ) {
+            db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            fetchCollection();
+          } else {
+            showMessage("error", "Database connection failed.", true);
+            dom.loadingSpinner.style.display = "none";
+          }
         }
 
         dom.lookupBtn.addEventListener("click", () =>
@@ -359,57 +369,87 @@
           renderCollection();
           showAddCopyForm(newBook.id);
         }
+        
+        async function removeCopy(copyId, bookIsbn) {
+          if (!db || !confirm("Are you sure you want to remove this item?")) return;
+        
+          const book = collection.get(bookIsbn);
+          const isLastCopy = book && book.inventory && book.inventory.length === 1;
+        
+          let error;
+        
+          if (isLastCopy) {
+            // This is the last copy, so delete the entire book record.
+            // ON DELETE CASCADE will handle removing the final inventory item.
+            const { error: deleteBookError } = await db
+              .from("books")
+              .delete()
+              .eq("id", bookIsbn);
+            error = deleteBookError;
+          } else {
+            // Not the last copy, just delete the specific inventory item.
+            const { error: deleteCopyError } = await db
+              .from("inventory")
+              .delete()
+              .eq("copy_id", copyId);
+            error = deleteCopyError;
+          }
+        
+          if (error) {
+            showMessage("error", `Failed to remove item: ${error.message}`);
+            return;
+          }
+        
+          // Refresh the entire collection from the database
+          await fetchCollection();
+          showMessage("info", "Item removed from inventory.");
+        }
 
         // --- Other Functions ---
         function showManualAddForm() {
-          /* ... unchanged ... */
+          dom.manualAddFormContainer.innerHTML = `<form id="manual-add-form"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-300 mb-1">Title*</label><input type="text" id="manual_title" class="w-full p-2 bg-gray-700 rounded-md text-white" required></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Author(s)</label><input type="text" id="manual_authors" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Publisher</label><input type="text" id="manual_publisher" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Binding</label><input type="text" id="manual_binding" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Hardcover"></div></div><div class="mt-4"><label class="block text-sm font-medium text-gray-300 mb-1">Cover URL</label><input type="text" id="manual_cover_url" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="https://..."></div><button type="submit" class="w-full mt-6 bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700">Create Book & Add Copy</button></form>`;
+          dom.manualAddBookModal.style.display = "flex";
+          document
+            .getElementById("manual-add-form")
+            .addEventListener("submit", handleManualAdd);
         }
         async function handleManualAdd(e) {
-          /* ... unchanged ... */
-        }
-        function initScanner() {
-          /* ... */
-        }
-        function startScanner() {
-          /* ... */
-        }
-        function stopScanner() {
-          /* ... */
-        }
-        async function fetchCollection() {
-          /* ... */
-        }
-        function showAddCopyForm(bookIsbn) {
-          /* ... unchanged ... */
-        }
-        async function handleAddCopy(e) {
-          /* ... unchanged ... */
-        }
-        async function removeCopy(copyId) {
-          /* ... unchanged ... */
-        }
-        function renderCollection() {
-          /* ... unchanged ... */
-        }
-        function showMessage(type, text, isSticky = false) {
-          /* ... */
-        }
-
-        // --- Unchanged function definitions for brevity ---
-        init();
-        function init() {
-          lucide.createIcons();
-          if (
-            typeof supabase !== "undefined" &&
-            SUPABASE_URL &&
-            SUPABASE_ANON_KEY
-          ) {
-            db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            fetchCollection();
-          } else {
-            showMessage("error", "Database connection failed.", true);
-            dom.loadingSpinner.style.display = "none";
+          e.preventDefault();
+          const form = e.target.elements;
+          const title = form.manual_title.value;
+          if (!title) {
+            showMessage("error", "Title is a required field.");
+            return;
           }
+          const slug = title
+            .toLowerCase()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9-]/g, "")
+            .substring(0, 50);
+          const uniqueId = `MANUAL-${slug}-${Date.now()}`;
+          const newBook = {
+            id: uniqueId,
+            title: title,
+            authors: form.manual_authors.value || "N/A",
+            publisher: form.manual_publisher.value || null,
+            binding: form.manual_binding.value || null,
+            cover_url:
+              form.manual_cover_url.value ||
+              "https://placehold.co/300x450/374151/9ca3af?text=No+Cover",
+          };
+          const { error } = await db.from("books").insert(newBook);
+          if (error) {
+            showMessage("error", `Could not save book: ${error.message}`);
+            return;
+          }
+          showMessage(
+            "success",
+            "Manual entry created! Now add your first copy."
+          );
+          dom.manualAddBookModal.style.display = "none";
+          collection.set(newBook.id, { ...newBook, inventory: [] });
+          renderCollection();
+          showAddCopyForm(newBook.id);
         }
         function initScanner() {
           if (typeof ZXing === "undefined") {
@@ -473,70 +513,6 @@
             renderCollection();
           }
           dom.loadingSpinner.style.display = "none";
-        }
-        function showManualAddForm() {
-          dom.manualAddFormContainer.innerHTML = `<form id="manual-add-form"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-300 mb-1">Title*</label><input type="text" id="manual_title" class="w-full p-2 bg-gray-700 rounded-md text-white" required></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Author(s)</label><input type="text" id="manual_authors" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Publisher</label><input type="text" id="manual_publisher" class="w-full p-2 bg-gray-700 rounded-md text-white"></div><div><label class="block text-sm font-medium text-gray-300 mb-1">Binding</label><input type="text" id="manual_binding" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="e.g., Hardcover"></div></div><div class="mt-4"><label class="block text-sm font-medium text-gray-300 mb-1">Cover URL</label><input type="text" id="manual_cover_url" class="w-full p-2 bg-gray-700 rounded-md text-white" placeholder="https://..."></div><button type="submit" class="w-full mt-6 bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700">Create Book & Add Copy</button></form>`;
-          dom.manualAddBookModal.style.display = "flex";
-          document
-            .getElementById("manual-add-form")
-            .addEventListener("submit", handleManualAdd);
-        }
-        async function handleManualAdd(e) {
-          e.preventDefault();
-          const form = e.target.elements;
-          const title = form.manual_title.value;
-          if (!title) {
-            showMessage("error", "Title is a required field.");
-            return;
-          }
-          const slug = title
-            .toLowerCase()
-            .replace(/\s+/g, "-")
-            .replace(/[^a-z0-9-]/g, "")
-            .substring(0, 50);
-          const uniqueId = `MANUAL-${slug}-${Date.now()}`;
-          const newBook = {
-            id: uniqueId,
-            title: title,
-            authors: form.manual_authors.value || "N/A",
-            publisher: form.manual_publisher.value || null,
-            binding: form.manual_binding.value || null,
-            cover_url:
-              form.manual_cover_url.value ||
-              "https://placehold.co/300x450/374151/9ca3af?text=No+Cover",
-          };
-          const { error } = await db.from("books").insert(newBook);
-          if (error) {
-            showMessage("error", `Could not save book: ${error.message}`);
-            return;
-          }
-          showMessage(
-            "success",
-            "Manual entry created! Now add your first copy."
-          );
-          dom.manualAddBookModal.style.display = "none";
-          collection.set(newBook.id, { ...newBook, inventory: [] });
-          renderCollection();
-          showAddCopyForm(newBook.id);
-        }
-        async function removeCopy(copyId) {
-          if (
-            !db ||
-            !confirm(
-              "Are you sure you want to permanently remove this copy from your inventory?"
-            )
-          )
-            return;
-          const { error } = await db
-            .from("inventory")
-            .delete()
-            .eq("copy_id", copyId);
-          if (error) {
-            showMessage("error", "Failed to remove copy.");
-            return;
-          }
-          await fetchCollection();
-          showMessage("info", "Copy removed from inventory.");
         }
         function showAddCopyForm(bookIsbn) {
           const book = collection.get(bookIsbn);
@@ -648,7 +624,7 @@
                       : ""
                   }</div><div class="text-right flex-shrink-0 space-y-2 flex flex-col items-end">${listedStatusBtn}<button class="remove-copy-btn p-1 text-red-400 hover:text-red-300" data-copy-id="${
                     copy.copy_id
-                  }"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`;
+                  }" data-book-isbn="${book.id}"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div></div>`;
                 })
                 .join("");
             } else {
@@ -690,7 +666,10 @@
           );
           document.querySelectorAll(".remove-copy-btn").forEach((btn) =>
             btn.addEventListener("click", (e) => {
-              removeCopy(e.currentTarget.dataset.copyId);
+              removeCopy(
+                e.currentTarget.dataset.copyId,
+                e.currentTarget.dataset.bookIsbn
+              );
             })
           );
           document.querySelectorAll(".add-first-copy-btn").forEach((btn) =>
@@ -729,6 +708,8 @@
           if (!isSticky)
             setTimeout(() => (dom.messageBox.innerHTML = ""), 4000);
         }
+
+        init();
       });
     </script>
   </body>
