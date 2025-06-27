@@ -86,28 +86,14 @@
         dom.closeManualAddModalBtn.addEventListener('click', () => dom.manualAddBookModal.style.display = 'none');
         
         dom.collectionGrid.addEventListener('click', (e) => {
-            const target = e.target.closest('button'); // Find the nearest button that was clicked
-            if (!target) {
-                // If the click wasn't on a button, it must be for the accordion
-                const toggleArea = e.target.closest('.accordion-toggle');
-                if (toggleArea) {
-                    toggleAccordion(toggleArea);
-                }
-                return;
-            }
-            
-            // Handle specific button actions
-            if (target.classList.contains('toggle-listed-btn')) {
-                const copyId = target.dataset.copyId;
-                const isListed = target.dataset.isListed === 'true';
-                toggleListedStatus(copyId, isListed);
-            } else if (target.classList.contains('remove-copy-btn')) {
-                removeCopy(target.dataset.copyId);
-            } else if (target.classList.contains('add-first-copy-btn')) {
-                showAddCopyForm(target.dataset.isbn);
+            const toggleButton = e.target.closest('.accordion-toggle');
+            if (toggleButton) {
+                // Check if the click was on a button inside the toggle header, if any in the future
+                if (e.target.closest('button')) return;
+                toggleAccordion(toggleButton);
             }
         });
-
+        
         function toggleAccordion(toggleButton) {
             toggleButton.classList.toggle('open');
             const content = toggleButton.nextElementSibling;
@@ -119,25 +105,43 @@
         }
 
         // --- Core Functions ---
-        async function toggleListedStatus(copyId, currentStatus) {
+        async function toggleListedStatus(copyId, currentStatus, buttonEl) {
             if (!db) return;
+
+            // Optimistically update UI
+            const newStatus = !currentStatus;
+            buttonEl.dataset.isListed = newStatus;
+            buttonEl.innerHTML = `<i data-lucide="${newStatus ? 'check-circle-2' : 'circle-dashed'}" class="w-4 h-4 mr-1"></i> ${newStatus ? 'Listed' : 'Unlisted'}`;
+            buttonEl.classList.toggle('bg-green-900', newStatus);
+            buttonEl.classList.toggle('text-green-300', newStatus);
+            buttonEl.classList.toggle('bg-gray-600', !newStatus);
+            buttonEl.classList.toggle('text-gray-300', !newStatus);
+            lucide.createIcons();
+
             const { error } = await db
                 .from('inventory')
-                .update({ is_listed: !currentStatus })
+                .update({ is_listed: newStatus })
                 .eq('copy_id', copyId);
 
             if (error) {
+                // Revert UI on error
                 showMessage('error', `Failed to update status: ${error.message}`);
+                buttonEl.dataset.isListed = currentStatus;
+                buttonEl.innerHTML = `<i data-lucide="${currentStatus ? 'check-circle-2' : 'circle-dashed'}" class="w-4 h-4 mr-1"></i> ${currentStatus ? 'Listed' : 'Unlisted'}`;
+                buttonEl.classList.toggle('bg-green-900', currentStatus);
+                buttonEl.classList.toggle('text-green-300', currentStatus);
+                buttonEl.classList.toggle('bg-gray-600', !currentStatus);
+                buttonEl.classList.toggle('text-gray-300', !currentStatus);
+                lucide.createIcons();
             } else {
-                // Instead of fetching all data, just update the local state for a faster UI response
+                 // Update local data cache silently
                 for (const book of collection.values()) {
-                    const inventoryItem = book.inventory.find(item => item.copy_id === copyId);
-                    if (inventoryItem) {
-                        inventoryItem.is_listed = !currentStatus;
+                    const item = book.inventory.find(inv => inv.copy_id === copyId);
+                    if (item) {
+                        item.is_listed = newStatus;
                         break;
                     }
                 }
-                renderCollection();
             }
         }
 
@@ -153,7 +157,6 @@
         async function removeCopy(copyId) { /* ... unchanged ... */ }
 
         function renderCollection() {
-            // Keep track of which accordions were open before re-rendering
             const openAccordions = new Set();
             document.querySelectorAll('.accordion-toggle.open').forEach(el => {
                 openAccordions.add(el.dataset.bookId);
@@ -223,6 +226,17 @@
                 `;
                 dom.collectionGrid.appendChild(bookEntryDiv);
             }
+            
+            // Re-attach specific event listeners after rendering
+            document.querySelectorAll('.toggle-listed-btn').forEach(btn => btn.addEventListener('click', e => {
+                toggleListedStatus(e.currentTarget.dataset.copyId, e.currentTarget.dataset.isListed === 'true', e.currentTarget);
+            }));
+            document.querySelectorAll('.remove-copy-btn').forEach(btn => btn.addEventListener('click', e => {
+                removeCopy(e.currentTarget.dataset.copyId);
+            }));
+             document.querySelectorAll('.add-first-copy-btn').forEach(btn => btn.addEventListener('click', e => {
+                showAddCopyForm(e.currentTarget.dataset.isbn);
+            }));
             
             // Re-open accordions that were open before the re-render
             document.querySelectorAll('.accordion-toggle').forEach(toggle => {
