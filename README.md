@@ -28,10 +28,7 @@
 * **Known Good State:** The event bubbling issue (clicking a button and collapsing the accordion) has been fixed. The app is stable and functional.
 
 ### **Next Steps & To-Do List**
-
-1. **Improve Data Quality:**  
-   * **Priority \#1:** Switch the data lookup from the **OpenLibrary API** to the more robust **Google Books API** to get more accurate metadata and, crucially, better cover images.  
-   * Implement an **"Edit Before Saving"** workflow. After looking up a new book, the app should present the fetched data in an editable form, allowing the user to verify/correct the cover art, publisher, etc., before creating the master record in the database.  
-2. **UI/UX Refinements:**  
+1. **UI/UX Refinements:**  
    * Implement an "item detail page" or an "edit copy" modal, accessible by clicking/tapping on a specific inventory copy. This would allow for editing details after the initial entry.  
-   * Add a search/filter bar for the main collection view.
+   * Add a search/filter bar for the main collection view with robust and powerful sort and filter.
+   * compact list view or similar
